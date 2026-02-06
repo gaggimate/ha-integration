@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Konfigurer GaggiMate",
+        "description": "Indtast forbindelsesoplysninger til din GaggiMate enhed",
+        "data": {
+          "host": "Vært (IP eller værtsnavn)",
+          "port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kunne ikke oprette forbindelse til enheden. Kontroler venligst værten og porten",
+      "unknown": "Der opstod en uventet fejl."
+    },
+    "abort": {
+      "already_configured": "Denne enhed er allerede konfigureret."
+    }
+  }
+}
