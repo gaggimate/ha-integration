@@ -1,7 +1,7 @@
 {
   "domain": "gaggimate",
   "name": "GaggiMate",
-  "codeowners": ["@jwpieroen"],
+  "codeowners": ["@jaapp"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/jaapp/ha_gaggimate",

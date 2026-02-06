@@ -69,17 +69,20 @@ async def async_setup_entry(
 class GaggiMateEntity(CoordinatorEntity[GaggiMateCoordinator]):
     """Base class for GaggiMate entities."""
 
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
         """Initialize the entity."""
         super().__init__(coordinator)
         self._entry = entry
+        self._device_name = entry.title or f"GaggiMate {self.coordinator.host}"
 
     @property
     def device_info(self):
         """Return device information."""
         return {
             "identifiers": {(DOMAIN, self.coordinator.host)},
-            "name": f"GaggiMate {self.coordinator.host}",
+            "name": self._device_name,
             "manufacturer": "GaggiMate",
             "model": "GaggiMate",
             "configuration_url": f"http://{self.coordinator.host}:{self.coordinator.port}",
