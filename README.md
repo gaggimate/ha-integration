@@ -12,6 +12,11 @@ A minimal custom integration for controlling and monitoring a GaggiMate‑equipp
 - Hardware model (diagnostic)
 - Display firmware version (diagnostic)
 - Controller firmware version (diagnostic)
+- Latest firmware version (diagnostic)
+- Display update available (diagnostic)
+- Controller update available (diagnostic)
+- Scale connection status (diagnostic)
+
 
 **Controls / Services**
 - Machine active switch
