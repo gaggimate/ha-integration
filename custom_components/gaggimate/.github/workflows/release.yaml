@@ -1,0 +1,26 @@
+name: Create GitHub Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: |
+            🚀 Release ${{ github.ref_name }}
+            - Changes go here
+          draft: false
+          prerelease: false
