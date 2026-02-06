@@ -27,6 +27,9 @@ from .const import (
     UNIQUE_ID_SW_DISPLAY,
     UNIQUE_ID_SW_CONTROLLER,
     UNIQUE_ID_TARGET_TEMP,
+    UNIQUE_ID_UPDATE_DISPLAY,
+    UNIQUE_ID_UPDATE_CONTROLLER,
+    UNIQUE_ID_LATEST_VERSION
 )
 from .coordinator import GaggiMateCoordinator
 
@@ -48,6 +51,8 @@ async def async_setup_entry(
         GaggiMateSelectedProfileSensor(coordinator, entry),
         GaggiMateHardwareModelSensor(coordinator, entry),
         GaggiMateDisplayVersionSensor(coordinator, entry),
+        GaggiMateDisplayUpdateSensor(coordinator, entry),
+        GaggiMateControllerUpdateSensor(coordinator, entry),
         GaggiMateControllerVersionSensor(coordinator, entry),
     ]
 
@@ -229,6 +234,18 @@ class GaggiMateDisplayVersionSensor(_GaggiMateDiagnosticSensor):
     @property
     def native_value(self) -> str | None:
         return self.coordinator.ota_settings.get("displayVersion")
+        
+class GaggiMateDisplayUpdateSensor(_GaggiMateDiagnosticSensor):
+    """Display Update Available."""
+
+    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_name = "Display Update Available"
+        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_UPDATE_DISPLAY}"
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.ota_settings.get("displayUpdateAvailable")
 
 
 class GaggiMateControllerVersionSensor(_GaggiMateDiagnosticSensor):
@@ -242,3 +259,27 @@ class GaggiMateControllerVersionSensor(_GaggiMateDiagnosticSensor):
     @property
     def native_value(self) -> str | None:
         return self.coordinator.ota_settings.get("controllerVersion")
+
+class GaggiMateControllerUpdateSensor(_GaggiMateDiagnosticSensor):
+    """Controller Update Available."""
+
+    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_name = "Controller Update Available"
+        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_UPDATE_CONTROLLER}"
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.ota_settings.get("controllerUpdateAvailable")
+
+class GaggiMateLatestVersionSensor(_GaggiMateDiagnosticSensor):
+    """Latest Software Version."""
+
+    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_name = "Latest Software Version"
+        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_LATEST_VERSION}"
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.ota_settings.get("controllerUpdateAvailable")
