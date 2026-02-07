@@ -31,5 +31,5 @@ A minimal custom integration for controlling and monitoring a GaggiMate‑equipp
 ## Install via HACS
 
 1. HACS → Integrations → ⋮ → Custom repositories
-2. Add `https://github.com/jaapp/ha_gaggimate` as category **Integration**
+2. Add `https://github.com/gaggimate/ha-integration` as category **Integration**
 3. Install “GaggiMate” and restart Home Assistant

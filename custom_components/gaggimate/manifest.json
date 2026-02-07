@@ -1,13 +1,13 @@
 {
   "domain": "gaggimate",
   "name": "GaggiMate",
-  "codeowners": ["@jaapp"],
+  "codeowners": ["@gaggimate"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/jaapp/ha_gaggimate",
+  "documentation": "https://github.com/gaggimate/ha-integration",
   "integration_type": "device",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/jaapp/ha_gaggimate/issues",
+  "issue_tracker": "https://github.com/gaggimate/ha-integration/issues",
   "requirements": [],
   "version": "1.0.0",
   "zeroconf": ["_gaggimate._tcp.local."]

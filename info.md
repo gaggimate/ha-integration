@@ -19,4 +19,4 @@ Control and monitor your GaggiMate smart espresso machine upgrade system from Ho
 
 ## Support
 
-For issues and feature requests, visit the [GitHub repository](https://github.com/jaapp/ha_gaggimate/issues).
+For issues and feature requests, visit the [GitHub repository](https://github.com/gaggimate/ha-integration/issues).
