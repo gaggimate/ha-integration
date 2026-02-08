@@ -13,7 +13,7 @@ DEFAULT_SCAN_INTERVAL = 1  # seconds
 WS_CONNECT_TIMEOUT = 10  # seconds
 WS_RECONNECT_DELAYS = [1, 2, 4, 8, 16, 30]  # seconds
 WS_REQUEST_TIMEOUT = 30  # seconds
-WS_UNAVAILABLE_TIMEOUT = 5  # seconds - mark unavailable if no status for 5 seconds
+WS_UNAVAILABLE_TIMEOUT = 10  # seconds - mark unavailable if no status for 5 seconds
 
 # Message types
 MSG_TYPE_STATUS = "evt:status"
