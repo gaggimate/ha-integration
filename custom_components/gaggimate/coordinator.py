@@ -207,6 +207,14 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             raise
         except Exception as err:
             _LOGGER.error("Error during reconnect: %s", err)
+            # If reconnect failed, this task is finishing; clear it so we can schedule
+            # the next retry attempt.
+            self._reconnect_task = None
+            await self._schedule_reconnect()
+        finally:
+            # If this reconnect task is still the active task reference, clear it.
+            if self._reconnect_task is asyncio.current_task():
+                self._reconnect_task = None
 
     async def _check_availability(self) -> None:
         """Periodically check if device is available based on last status time."""
@@ -220,9 +228,14 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                 time_since_status = (datetime.now() - self._last_status_time).total_seconds()
 
                 if time_since_status > WS_UNAVAILABLE_TIMEOUT:
-                    if self.last_update_success:
-                        _LOGGER.warning("No status update received for %s seconds, marking unavailable", time_since_status)
-                        self.async_set_updated_data(None)
+                    _LOGGER.warning(
+                        "No status update received for %s seconds, reconnecting WebSocket",
+                        round(time_since_status, 1),
+                    )
+                    self.async_set_updated_data(None)
+                    self._last_status_time = None
+                    if self._ws and not self._ws.closed:
+                        await self._ws.close()
 
             except asyncio.CancelledError:
                 _LOGGER.debug("Availability check task cancelled")
