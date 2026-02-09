@@ -207,6 +207,14 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             raise
         except Exception as err:
             _LOGGER.error("Error during reconnect: %s", err)
+            # If reconnect failed, this task is finishing; clear it so we can schedule
+            # the next retry attempt.
+            self._reconnect_task = None
+            await self._schedule_reconnect()
+        finally:
+            # If this reconnect task is still the active task reference, clear it.
+            if self._reconnect_task is asyncio.current_task():
+                self._reconnect_task = None
 
     async def _check_availability(self) -> None:
         """Periodically check if device is available based on last status time."""
