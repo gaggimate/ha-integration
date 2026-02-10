@@ -134,7 +134,12 @@ class GaggiMateCurrentWeight(GaggiMateEntity, SensorEntity):
         """Return the current weight."""
         if self.coordinator.data is None:
             return None
+
+        if not self.coordinator.data.get("bc"):
+            return None  # shows as Unavailable
+
         return self.coordinator.data.get("cw")
+
 
 
 
@@ -242,7 +247,7 @@ class GaggiMateScaleConnected(GaggiMateEntity, SensorEntity):
     def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry)
-        self._attr_name = "Scale connection status"
+        self._attr_name = "Scale Connection"
         self._attr_unique_id = f"{coordinator.host}_{GaggiMateScaleConnected}"
 
     @property
@@ -250,7 +255,12 @@ class GaggiMateScaleConnected(GaggiMateEntity, SensorEntity):
         """Return the scale connection status."""
         if self.coordinator.data is None:
             return None
-        return self.coordinator.data.get("bc")
+
+        bc = self.coordinator.data.get("bc")
+        if bc is None:
+            return None
+
+        return "Connected" if bc else "Disconnected"
 
 class _GaggiMateDiagnosticSensor(GaggiMateEntity, SensorEntity):
     """Base class for diagnostic sensors."""
