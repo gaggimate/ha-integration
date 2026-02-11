@@ -12,8 +12,9 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     UnitOfTemperature,
-    UnitOfMass
-    )
+    UnitOfMass,
+    UnitOfPressure,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -34,7 +35,12 @@ from .const import (
     UNIQUE_ID_UPDATE_CONTROLLER,
     UNIQUE_ID_LATEST_VERSION,
     UNIQUE_ID_SCALE_CONNECTED,
-    UNIQUE_ID_CURRENT_WEIGHT
+    UNIQUE_ID_CURRENT_WEIGHT,
+    UNIQUE_ID_CURRENT_PRESSURE,
+    UNIQUE_ID_TARGET_PRESSURE,
+    UNIQUE_ID_PUMP_FLOW,
+    UNIQUE_ID_TARGET_VOLUME,
+    UNIQUE_ID_SHOT_VOLUME_PROGRESS,
 )
 from .coordinator import GaggiMateCoordinator
 
@@ -61,6 +67,11 @@ async def async_setup_entry(
         GaggiMateControllerVersionSensor(coordinator, entry),
         GaggiMateScaleConnected(coordinator, entry),
         GaggiMateCurrentWeight(coordinator, entry),
+        GaggiMateCurrentPressureSensor(coordinator, entry),
+        GaggiMateTargetPressureSensor(coordinator, entry),
+        GaggiMatePumpFlowSensor(coordinator, entry),
+        GaggiMateTargetVolumeSensor(coordinator, entry),
+        GaggiMateShotVolumeProgressSensor(coordinator, entry),
     ]
 
     async_add_entities(entities)
@@ -121,6 +132,7 @@ class GaggiMateCurrentWeight(GaggiMateEntity, SensorEntity):
     _attr_device_class = SensorDeviceClass.WEIGHT
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfMass.GRAMS
+    _attr_suggested_display_precision = 1
     _attr_icon = "mdi:scale"
 
     def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
@@ -139,6 +151,115 @@ class GaggiMateCurrentWeight(GaggiMateEntity, SensorEntity):
             return None  # shows as Unavailable
 
         return self.coordinator.data.get("cw")
+
+
+class GaggiMateCurrentPressureSensor(GaggiMateEntity, SensorEntity):
+    """Current boiler pressure."""
+
+    _attr_device_class = SensorDeviceClass.PRESSURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfPressure.BAR
+    _attr_icon = "mdi:gauge"
+
+    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_name = "Current Pressure"
+        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_CURRENT_PRESSURE}"
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        value = self.coordinator.data.get("pr")
+        return float(value) if value is not None else None
+
+
+class GaggiMateTargetPressureSensor(GaggiMateEntity, SensorEntity):
+    """Target / limit pressure."""
+
+    _attr_device_class = SensorDeviceClass.PRESSURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfPressure.BAR
+    _attr_icon = "mdi:gauge-full"
+
+    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_name = "Target Pressure"
+        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_TARGET_PRESSURE}"
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        value = self.coordinator.data.get("pt")
+        return float(value) if value is not None else None
+
+
+class GaggiMatePumpFlowSensor(GaggiMateEntity, SensorEntity):
+    """Pump flow rate."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:water-pump"
+    _attr_native_unit_of_measurement = "mL/s"
+
+    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_name = "Pump Flow"
+        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_PUMP_FLOW}"
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        value = self.coordinator.data.get("fl")
+        return float(value) if value is not None else None
+
+
+class GaggiMateTargetVolumeSensor(GaggiMateEntity, SensorEntity):
+    """Target shot volume/weight."""
+
+    _attr_device_class = SensorDeviceClass.WEIGHT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfMass.GRAMS
+    _attr_suggested_display_precision = 1
+    _attr_icon = "mdi:cup-water"
+
+    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_name = "Target Shot Volume"
+        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_TARGET_VOLUME}"
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        value = self.coordinator.data.get("tw")
+        return float(value) if value is not None else None
+
+
+class GaggiMateShotVolumeProgressSensor(GaggiMateEntity, SensorEntity):
+    """Shot volume progress for current process (volumetric only)."""
+
+    _attr_device_class = SensorDeviceClass.WEIGHT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfMass.GRAMS
+    _attr_suggested_display_precision = 1
+    _attr_icon = "mdi:chart-line"
+
+    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_name = "Shot Volume Progress"
+        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_SHOT_VOLUME_PROGRESS}"
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        process = self.coordinator.data.get("process") or {}
+        if process.get("tt") != "volumetric":
+            return None
+        value = process.get("pp")
+        return float(value) if value is not None else None
 
 
 
