@@ -34,6 +34,8 @@ from .const import (
     UNIQUE_ID_SCALE_CONNECTED,
     UNIQUE_ID_SELECTED_PROFILE,
     UNIQUE_ID_SHOT_VOLUME_PROGRESS,
+    UNIQUE_ID_PROCESS_PHASE,
+    UNIQUE_ID_STATUS,
     UNIQUE_ID_SW_CONTROLLER,
     UNIQUE_ID_SW_DISPLAY,
     UNIQUE_ID_TARGET_PRESSURE,
@@ -150,6 +152,47 @@ class GaggiMateSensor(GaggiMateEntity, SensorEntity):
         return {}
 
 
+STATUS_ICONS = {
+    "Idle": "mdi:coffee-maker-outline",
+    "Brewing": "mdi:coffee",
+    "Steaming": "mdi:cloud",
+    "Grinding": "mdi:grain",
+    "Pouring Water": "mdi:water",
+}
+
+
+def _get_status(data: dict[str, Any]) -> str:
+    """Derive machine activity status from process and mode data."""
+    process = data.get("process") or {}
+    process_active = process.get("a") == 1
+    grind_active = data.get("gact") == 1
+    mode = data.get("m")
+
+    if grind_active or (process_active and process.get("s") == "grind"):
+        return "Grinding"
+    if process_active and process.get("s") in ("brew", "infusion"):
+        return "Brewing"
+    if process_active and mode == MachineMode.STEAM:
+        return "Steaming"
+    if process_active and mode == MachineMode.WATER:
+        return "Pouring Water"
+    return "Idle"
+
+
+def _get_status_icon(data: dict[str, Any], _: GaggiMateCoordinator) -> str:
+    """Return icon for the current status."""
+    return STATUS_ICONS.get(_get_status(data), "mdi:coffee-maker-outline")
+
+
+def _get_status_attrs(data: dict[str, Any], _: GaggiMateCoordinator) -> dict[str, Any]:
+    """Return extra attributes for the status sensor."""
+    process = data.get("process") or {}
+    attrs: dict[str, Any] = {}
+    if process.get("e") is not None:
+        attrs["elapsed_seconds"] = round(process["e"] / 1000, 1)
+    return attrs
+
+
 def _get_mode_name(data: dict[str, Any]) -> str | None:
     """Map raw mode to friendly name."""
     mode_value = data.get("m")
@@ -190,6 +233,19 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         icon="mdi:thermometer-auto",
         value_fn=lambda data, _: data.get("tt"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_STATUS,
+        name="Status",
+        value_fn=lambda data, _: _get_status(data),
+        icon_fn=_get_status_icon,
+        extra_attrs_fn=_get_status_attrs,
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_PROCESS_PHASE,
+        name="Process Phase",
+        icon="mdi:list-status",
+        value_fn=lambda data, _: (data.get("process") or {}).get("l"),
     ),
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_MODE,
