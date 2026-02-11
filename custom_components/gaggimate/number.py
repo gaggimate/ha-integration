@@ -1,9 +1,17 @@
 """Number platform for GaggiMate integration."""
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 import logging
+from typing import Any
 
-from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
+from homeassistant.components.number import (
+    NumberDeviceClass,
+    NumberEntity,
+    NumberEntityDescription,
+    NumberMode,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
@@ -19,6 +27,31 @@ MIN_TEMP_C = 0
 MAX_TEMP_C = 160
 
 
+@dataclass(frozen=True, kw_only=True)
+class GaggiMateNumberEntityDescription(NumberEntityDescription):
+    """Describe a GaggiMate number."""
+
+    value_fn: Callable[[dict[str, Any], GaggiMateCoordinator], float | None]
+    set_value_fn: Callable[[GaggiMateCoordinator, float], Awaitable[None]]
+
+
+SENSORS: tuple[GaggiMateNumberEntityDescription, ...] = (
+    GaggiMateNumberEntityDescription(
+        key=UNIQUE_ID_TARGET_TEMP_SETPOINT,
+        name="Target Temperature Setpoint",
+        device_class=NumberDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        native_min_value=MIN_TEMP_C,
+        native_max_value=MAX_TEMP_C,
+        native_step=1,
+        mode=NumberMode.BOX,
+        icon="mdi:thermometer",
+        value_fn=lambda data, _: None if data.get("tt") is None else float(data.get("tt")),
+        set_value_fn=lambda coordinator, value: coordinator.set_temperature(value),
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -27,45 +60,39 @@ async def async_setup_entry(
     """Set up GaggiMate number entities."""
     coordinator: GaggiMateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    entities = [
-        GaggiMateTargetTemperatureNumber(coordinator, entry),
-    ]
-
-    async_add_entities(entities)
+    async_add_entities(
+        GaggiMateNumber(coordinator, entry, description) for description in SENSORS
+    )
 
 
-class GaggiMateTargetTemperatureNumber(GaggiMateEntity, NumberEntity):
-    """Target temperature setpoint."""
+class GaggiMateNumber(GaggiMateEntity, NumberEntity):
+    """Generic GaggiMate number driven by descriptions."""
 
-    _attr_device_class = NumberDeviceClass.TEMPERATURE
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-    _attr_native_min_value = MIN_TEMP_C
-    _attr_native_max_value = MAX_TEMP_C
-    _attr_native_step = 1
-    _attr_mode = NumberMode.BOX
-    _attr_icon = "mdi:thermometer"
+    entity_description: GaggiMateNumberEntityDescription
 
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
+    def __init__(
+        self,
+        coordinator: GaggiMateCoordinator,
+        entry: ConfigEntry,
+        description: GaggiMateNumberEntityDescription,
+    ) -> None:
         """Initialize the number entity."""
         super().__init__(coordinator, entry)
-        self._attr_name = "Target Temperature Setpoint"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_TARGET_TEMP_SETPOINT}"
+        self.entity_description = description
+        self._attr_unique_id = f"{coordinator.host}_{description.key}"
+        self._attr_name = description.name
 
     @property
     def native_value(self) -> float | None:
-        """Return the current target temperature."""
-        if self.coordinator.data is None:
-            return None
-        value = self.coordinator.data.get("tt")
-        if value is None:
-            return None
-        return float(value)
+        """Return the current value."""
+        data = self.coordinator.data or {}
+        return self.entity_description.value_fn(data, self.coordinator)
 
     async def async_set_native_value(self, value: float) -> None:
-        """Set new target temperature."""
+        """Set new value."""
         try:
-            await self.coordinator.set_temperature(value)
-            _LOGGER.debug("Set target temperature to %s", value)
-        except Exception as err:
-            _LOGGER.error("Failed to set target temperature: %s", err)
+            await self.entity_description.set_value_fn(self.coordinator, value)
+            _LOGGER.debug("Set %s to %s", self.entity_description.key, value)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("Failed to set %s: %s", self.entity_description.key, err)
             raise

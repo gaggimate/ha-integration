@@ -1,21 +1,21 @@
 """Sensor platform for GaggiMate integration."""
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 import logging
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
+    SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.helpers.entity import EntityCategory
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    UnitOfTemperature,
-    UnitOfMass,
-    UnitOfPressure,
-)
+from homeassistant.const import UnitOfMass, UnitOfPressure, UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -24,27 +24,39 @@ from .const import (
     MODE_ICONS,
     MODE_NAMES,
     MachineMode,
-    UNIQUE_ID_CURRENT_TEMP,
-    UNIQUE_ID_MODE,
-    UNIQUE_ID_SELECTED_PROFILE,
-    UNIQUE_ID_HW_MODEL,
-    UNIQUE_ID_SW_DISPLAY,
-    UNIQUE_ID_SW_CONTROLLER,
-    UNIQUE_ID_TARGET_TEMP,
-    UNIQUE_ID_UPDATE_DISPLAY,
-    UNIQUE_ID_UPDATE_CONTROLLER,
-    UNIQUE_ID_LATEST_VERSION,
-    UNIQUE_ID_SCALE_CONNECTED,
-    UNIQUE_ID_CURRENT_WEIGHT,
     UNIQUE_ID_CURRENT_PRESSURE,
-    UNIQUE_ID_TARGET_PRESSURE,
+    UNIQUE_ID_CURRENT_TEMP,
+    UNIQUE_ID_CURRENT_WEIGHT,
+    UNIQUE_ID_HW_MODEL,
+    UNIQUE_ID_LATEST_VERSION,
+    UNIQUE_ID_MODE,
     UNIQUE_ID_PUMP_FLOW,
-    UNIQUE_ID_TARGET_VOLUME,
+    UNIQUE_ID_SCALE_CONNECTED,
+    UNIQUE_ID_SELECTED_PROFILE,
     UNIQUE_ID_SHOT_VOLUME_PROGRESS,
+    UNIQUE_ID_SW_CONTROLLER,
+    UNIQUE_ID_SW_DISPLAY,
+    UNIQUE_ID_TARGET_PRESSURE,
+    UNIQUE_ID_TARGET_TEMP,
+    UNIQUE_ID_TARGET_VOLUME,
+    UNIQUE_ID_UPDATE_CONTROLLER,
+    UNIQUE_ID_UPDATE_DISPLAY,
 )
 from .coordinator import GaggiMateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+PARALLEL_UPDATES = 1
+
+
+@dataclass(frozen=True, kw_only=True)
+class GaggiMateSensorEntityDescription(SensorEntityDescription):
+    """Describe a GaggiMate sensor."""
+
+    value_fn: Callable[[dict[str, Any], GaggiMateCoordinator], Any]
+    available_fn: Callable[[dict[str, Any], GaggiMateCoordinator], bool] | None = None
+    icon_fn: Callable[[dict[str, Any], GaggiMateCoordinator], str] | None = None
+    extra_attrs_fn: Callable[[dict[str, Any], GaggiMateCoordinator], dict[str, Any]] | None = None
 
 
 async def async_setup_entry(
@@ -55,26 +67,9 @@ async def async_setup_entry(
     """Set up GaggiMate sensors."""
     coordinator: GaggiMateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    entities = [
-        GaggiMateCurrentTemperatureSensor(coordinator, entry),
-        GaggiMateTargetTemperatureSensor(coordinator, entry),
-        GaggiMateModeSensor(coordinator, entry),
-        GaggiMateSelectedProfileSensor(coordinator, entry),
-        GaggiMateHardwareModelSensor(coordinator, entry),
-        GaggiMateDisplayVersionSensor(coordinator, entry),
-        GaggiMateDisplayUpdateSensor(coordinator, entry),
-        GaggiMateControllerUpdateSensor(coordinator, entry),
-        GaggiMateControllerVersionSensor(coordinator, entry),
-        GaggiMateScaleConnected(coordinator, entry),
-        GaggiMateCurrentWeight(coordinator, entry),
-        GaggiMateCurrentPressureSensor(coordinator, entry),
-        GaggiMateTargetPressureSensor(coordinator, entry),
-        GaggiMatePumpFlowSensor(coordinator, entry),
-        GaggiMateTargetVolumeSensor(coordinator, entry),
-        GaggiMateShotVolumeProgressSensor(coordinator, entry),
-    ]
-
-    async_add_entities(entities)
+    async_add_entities(
+        GaggiMateSensor(coordinator, entry, description) for description in SENSORS
+    )
 
 
 class GaggiMateEntity(CoordinatorEntity[GaggiMateCoordinator]):
@@ -105,370 +100,217 @@ class GaggiMateEntity(CoordinatorEntity[GaggiMateCoordinator]):
         return self.coordinator.last_update_success and self.coordinator.data is not None
 
 
-class GaggiMateCurrentTemperatureSensor(GaggiMateEntity, SensorEntity):
-    """Current temperature sensor."""
+class GaggiMateSensor(GaggiMateEntity, SensorEntity):
+    """Generic GaggiMate sensor driven by descriptions."""
 
-    _attr_device_class = SensorDeviceClass.TEMPERATURE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-    _attr_icon = "mdi:thermometer"
+    entity_description: GaggiMateSensorEntityDescription
 
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
+    def __init__(
+        self,
+        coordinator: GaggiMateCoordinator,
+        entry: ConfigEntry,
+        description: GaggiMateSensorEntityDescription,
+    ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry)
-        self._attr_name = "Current Temperature"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_CURRENT_TEMP}"
+        self.entity_description = description
+        self._attr_unique_id = f"{coordinator.host}_{description.key}"
+        self._attr_name = description.name
 
     @property
-    def native_value(self) -> float | None:
-        """Return the current temperature."""
-        if self.coordinator.data is None:
-            return None
-        return self.coordinator.data.get("ct")
-
-class GaggiMateCurrentWeight(GaggiMateEntity, SensorEntity):
-    """Current weight from scale."""
-
-    _attr_device_class = SensorDeviceClass.WEIGHT
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfMass.GRAMS
-    _attr_suggested_display_precision = 1
-    _attr_icon = "mdi:scale"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator, entry)
-        self._attr_name = "Current Weight"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_CURRENT_WEIGHT}"
+    def available(self) -> bool:
+        """Return if entity is available."""
+        if not super().available:
+            return False
+        if self.entity_description.available_fn:
+            data = self.coordinator.data or {}
+            return self.entity_description.available_fn(data, self.coordinator)
+        return True
 
     @property
-    def native_value(self) -> float | None:
-        """Return the current weight."""
-        if self.coordinator.data is None:
-            return None
-
-        if not self.coordinator.data.get("bc"):
-            return None  # shows as Unavailable
-
-        return self.coordinator.data.get("cw")
-
-
-class GaggiMateCurrentPressureSensor(GaggiMateEntity, SensorEntity):
-    """Current boiler pressure."""
-
-    _attr_device_class = SensorDeviceClass.PRESSURE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfPressure.BAR
-    _attr_icon = "mdi:gauge"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_name = "Current Pressure"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_CURRENT_PRESSURE}"
+    def native_value(self):
+        """Return the current value."""
+        data = self.coordinator.data or {}
+        return self.entity_description.value_fn(data, self.coordinator)
 
     @property
-    def native_value(self) -> float | None:
-        if self.coordinator.data is None:
-            return None
-        value = self.coordinator.data.get("pr")
-        return float(value) if value is not None else None
-
-
-class GaggiMateTargetPressureSensor(GaggiMateEntity, SensorEntity):
-    """Target / limit pressure."""
-
-    _attr_device_class = SensorDeviceClass.PRESSURE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfPressure.BAR
-    _attr_icon = "mdi:gauge-full"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_name = "Target Pressure"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_TARGET_PRESSURE}"
+    def icon(self) -> str | None:
+        """Return dynamic icon when provided."""
+        data = self.coordinator.data or {}
+        if self.entity_description.icon_fn:
+            return self.entity_description.icon_fn(data, self.coordinator)
+        return self.entity_description.icon
 
     @property
-    def native_value(self) -> float | None:
-        if self.coordinator.data is None:
-            return None
-        value = self.coordinator.data.get("pt")
-        return float(value) if value is not None else None
-
-
-class GaggiMatePumpFlowSensor(GaggiMateEntity, SensorEntity):
-    """Pump flow rate."""
-
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:water-pump"
-    _attr_native_unit_of_measurement = "mL/s"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_name = "Pump Flow"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_PUMP_FLOW}"
-
-    @property
-    def native_value(self) -> float | None:
-        if self.coordinator.data is None:
-            return None
-        value = self.coordinator.data.get("fl")
-        return float(value) if value is not None else None
-
-
-class GaggiMateTargetVolumeSensor(GaggiMateEntity, SensorEntity):
-    """Target shot volume/weight."""
-
-    _attr_device_class = SensorDeviceClass.WEIGHT
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfMass.GRAMS
-    _attr_suggested_display_precision = 1
-    _attr_icon = "mdi:cup-water"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_name = "Target Shot Volume"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_TARGET_VOLUME}"
-
-    @property
-    def native_value(self) -> float | None:
-        if self.coordinator.data is None:
-            return None
-        value = self.coordinator.data.get("tw")
-        return float(value) if value is not None else None
-
-
-class GaggiMateShotVolumeProgressSensor(GaggiMateEntity, SensorEntity):
-    """Shot volume progress for current process (volumetric only)."""
-
-    _attr_device_class = SensorDeviceClass.WEIGHT
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfMass.GRAMS
-    _attr_suggested_display_precision = 1
-    _attr_icon = "mdi:chart-line"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_name = "Shot Volume Progress"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_SHOT_VOLUME_PROGRESS}"
-
-    @property
-    def native_value(self) -> float | None:
-        if self.coordinator.data is None:
-            return None
-        process = self.coordinator.data.get("process") or {}
-        if process.get("tt") != "volumetric":
-            return None
-        value = process.get("pp")
-        return float(value) if value is not None else None
-
-
-
-
-class GaggiMateTargetTemperatureSensor(GaggiMateEntity, SensorEntity):
-    """Target temperature sensor."""
-
-    _attr_device_class = SensorDeviceClass.TEMPERATURE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-    _attr_icon = "mdi:thermometer-auto"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator, entry)
-        self._attr_name = "Target Temperature"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_TARGET_TEMP}"
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the target temperature."""
-        if self.coordinator.data is None:
-            return None
-        return self.coordinator.data.get("tt")
-
-
-class GaggiMateModeSensor(GaggiMateEntity, SensorEntity):
-    """Machine mode sensor."""
-
-    _attr_device_class = None
-    _attr_state_class = None
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator, entry)
-        self._attr_name = "Mode"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_MODE}"
-
-    @property
-    def native_value(self) -> str | None:
-        """Return the machine mode."""
-        if self.coordinator.data is None:
-            return None
-
-        mode_value = self.coordinator.data.get("m")
-        if mode_value is None:
-            return None
-
-        try:
-            mode = MachineMode(mode_value)
-            return MODE_NAMES.get(mode, "Unknown")
-        except ValueError:
-            return "Unknown"
-
-    @property
-    def icon(self) -> str:
-        """Return the icon based on current mode."""
-        if self.coordinator.data is None:
-            return "mdi:coffee-maker"
-
-        mode_value = self.coordinator.data.get("m")
-        if mode_value is None:
-            return "mdi:coffee-maker"
-
-        try:
-            mode = MachineMode(mode_value)
-            return MODE_ICONS.get(mode, "mdi:coffee-maker")
-        except ValueError:
-            return "mdi:coffee-maker"
-
-    @property
-    def extra_state_attributes(self) -> dict[str, any]:
-        """Return additional attributes."""
-        if self.coordinator.data is None:
-            return {}
-
-        return {
-            "mode_id": self.coordinator.data.get("m"),
-        }
-
-
-class GaggiMateSelectedProfileSensor(GaggiMateEntity, SensorEntity):
-    """Selected profile sensor."""
-
-    _attr_icon = "mdi:coffee"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator, entry)
-        self._attr_name = "Selected Profile"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_SELECTED_PROFILE}"
-
-    @property
-    def native_value(self) -> str | None:
-        """Return the selected profile label."""
-        if self.coordinator.data is None:
-            return None
-        return self.coordinator.data.get("p")
-
-    
-class GaggiMateScaleConnected(GaggiMateEntity, SensorEntity):
-    """Scale connected Status"""
-
-    _attr_icon = "mdi:scale"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator, entry)
-        self._attr_name = "Scale Connection"
-        self._attr_unique_id = f"{coordinator.host}_{GaggiMateScaleConnected}"
-
-    @property
-    def native_value(self) -> str | None:
-        """Return the scale connection status."""
-        if self.coordinator.data is None:
-            return None
-
-        bc = self.coordinator.data.get("bc")
-        if bc is None:
-            return None
-
-        return "Connected" if bc else "Disconnected"
-
-class _GaggiMateDiagnosticSensor(GaggiMateEntity, SensorEntity):
-    """Base class for diagnostic sensors."""
-
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-
-class GaggiMateHardwareModelSensor(_GaggiMateDiagnosticSensor):
-    """Hardware model sensor."""
-
-    _attr_icon = "mdi:chip"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_name = "Hardware Model"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_HW_MODEL}"
-
-    @property
-    def native_value(self) -> str | None:
-        return self.coordinator.ota_settings.get("hardware")
-
-
-class GaggiMateDisplayVersionSensor(_GaggiMateDiagnosticSensor):
-    """Display firmware version sensor."""
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_name = "Display Firmware Version"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_SW_DISPLAY}"
-
-    @property
-    def native_value(self) -> str | None:
-        return self.coordinator.ota_settings.get("displayVersion")
-        
-class GaggiMateDisplayUpdateSensor(_GaggiMateDiagnosticSensor):
-    """Display Update Available."""
-
-    _attr_icon = "mdi:update"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_name = "Display Update Available"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_UPDATE_DISPLAY}"
-
-    @property
-    def native_value(self) -> str | None:
-        return self.coordinator.ota_settings.get("displayUpdateAvailable")
-
-
-class GaggiMateControllerVersionSensor(_GaggiMateDiagnosticSensor):
-    """Controller firmware version sensor."""
-
-    _attr_icon = "mdi:application-braces"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_name = "Controller Firmware Version"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_SW_CONTROLLER}"
-
-    @property
-    def native_value(self) -> str | None:
-        return self.coordinator.ota_settings.get("controllerVersion")
-
-class GaggiMateControllerUpdateSensor(_GaggiMateDiagnosticSensor):
-    """Controller Update Available."""
-
-    _attr_icon = "mdi:update"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_name = "Controller Update Available"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_UPDATE_CONTROLLER}"
-
-    @property
-    def native_value(self) -> str | None:
-        return self.coordinator.ota_settings.get("controllerUpdateAvailable")
-
-class GaggiMateLatestVersionSensor(_GaggiMateDiagnosticSensor):
-    """Latest Software Version."""
-
-    _attr_icon = "mdi:application-braces"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_name = "Latest Software Version"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_LATEST_VERSION}"
-
-    @property
-    def native_value(self) -> str | None:
-        return self.coordinator.ota_settings.get("controllerUpdateAvailable")
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return any extra attributes."""
+        data = self.coordinator.data or {}
+        if self.entity_description.extra_attrs_fn:
+            return self.entity_description.extra_attrs_fn(data, self.coordinator)
+        return {}
+
+
+def _get_mode_name(data: dict[str, Any]) -> str | None:
+    """Map raw mode to friendly name."""
+    mode_value = data.get("m")
+    if mode_value is None:
+        return None
+    try:
+        return MODE_NAMES.get(MachineMode(mode_value), "Unknown")
+    except ValueError:
+        return "Unknown"
+
+
+def _get_mode_icon(data: dict[str, Any]) -> str:
+    """Map raw mode to icon."""
+    mode_value = data.get("m")
+    if mode_value is None:
+        return "mdi:coffee-maker"
+    try:
+        return MODE_ICONS.get(MachineMode(mode_value), "mdi:coffee-maker")
+    except ValueError:
+        return "mdi:coffee-maker"
+
+
+SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_CURRENT_TEMP,
+        name="Current Temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon="mdi:thermometer",
+        value_fn=lambda data, _: data.get("ct"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_TARGET_TEMP,
+        name="Target Temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon="mdi:thermometer-auto",
+        value_fn=lambda data, _: data.get("tt"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_MODE,
+        name="Mode",
+        value_fn=lambda data, _: _get_mode_name(data),
+        icon_fn=lambda data, _: _get_mode_icon(data),
+        extra_attrs_fn=lambda data, _: {"mode_id": data.get("m")} if data.get("m") is not None else {},
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_SELECTED_PROFILE,
+        name="Selected Profile",
+        icon="mdi:coffee",
+        value_fn=lambda data, _: data.get("p"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_SCALE_CONNECTED,
+        name="Scale Connection",
+        icon="mdi:scale",
+        value_fn=lambda data, _: None
+        if data.get("bc") is None
+        else ("Connected" if data.get("bc") else "Disconnected"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_CURRENT_WEIGHT,
+        name="Current Weight",
+        device_class=SensorDeviceClass.WEIGHT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfMass.GRAMS,
+        suggested_display_precision=1,
+        icon="mdi:scale",
+        value_fn=lambda data, _: None if not data.get("bc") else data.get("cw"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_CURRENT_PRESSURE,
+        name="Current Pressure",
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPressure.BAR,
+        icon="mdi:gauge",
+        value_fn=lambda data, _: None if data.get("pr") is None else float(data.get("pr")),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_TARGET_PRESSURE,
+        name="Target Pressure",
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPressure.BAR,
+        icon="mdi:gauge-full",
+        value_fn=lambda data, _: None if data.get("pt") is None else float(data.get("pt")),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_PUMP_FLOW,
+        name="Pump Flow",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="mL/s",
+        icon="mdi:water-pump",
+        value_fn=lambda data, _: None if data.get("fl") is None else float(data.get("fl")),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_TARGET_VOLUME,
+        name="Target Shot Volume",
+        device_class=SensorDeviceClass.WEIGHT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfMass.GRAMS,
+        suggested_display_precision=1,
+        icon="mdi:cup-water",
+        value_fn=lambda data, _: None if data.get("tw") is None else float(data.get("tw")),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_SHOT_VOLUME_PROGRESS,
+        name="Shot Volume Progress",
+        device_class=SensorDeviceClass.WEIGHT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfMass.GRAMS,
+        suggested_display_precision=1,
+        icon="mdi:chart-line",
+        value_fn=lambda data, _: (
+            None
+            if (process := data.get("process") or {}).get("tt") != "volumetric"
+            else (None if process.get("pp") is None else float(process.get("pp")))
+        ),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_HW_MODEL,
+        name="Hardware Model",
+        icon="mdi:chip",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda _, coordinator: coordinator.ota_settings.get("hardware"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_SW_DISPLAY,
+        name="Display Firmware Version",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda _, coordinator: coordinator.ota_settings.get("displayVersion"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_UPDATE_DISPLAY,
+        name="Display Update Available",
+        icon="mdi:update",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda _, coordinator: coordinator.ota_settings.get("displayUpdateAvailable"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_SW_CONTROLLER,
+        name="Controller Firmware Version",
+        icon="mdi:application-braces",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda _, coordinator: coordinator.ota_settings.get("controllerVersion"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_UPDATE_CONTROLLER,
+        name="Controller Update Available",
+        icon="mdi:update",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda _, coordinator: coordinator.ota_settings.get("controllerUpdateAvailable"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_LATEST_VERSION,
+        name="Latest Software Version",
+        icon="mdi:application-braces",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda _, coordinator: coordinator.ota_settings.get("latestVersion"),
+    ),
+)
