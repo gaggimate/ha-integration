@@ -144,14 +144,14 @@ automation:
 
 ### Turbo Preheat: Faster Boiler & Portafilter Warm-Up
 
-Temporarily raises the target temperature to 120°C for 30 seconds, then restores the profile temperature. This pushes extra heat into the boiler and portafilter so everything reaches brewing temperature faster.
+Immediately raises the target temperature to 120°C, waits for the boiler to reach the original profile temperature, then holds at the boosted setpoint for an additional 30 seconds before restoring the profile temperature. This pushes extra heat into the boiler and portafilter so everything reaches brewing temperature faster.
 
 ```yaml
 script:
   gaggimate_turbo_preheat:
     alias: "GaggiMate Turbo Preheat"
     icon: mdi:fire
-    description: "Temporarily boost setpoint to 120°C for 30s to preheat boiler and portafilter faster"
+    description: "Bring the boiler and portafilter up to a _stable_ temp faster. Boost setpoint to 120°C until profile temp reached, hold 30s, then restore profile temp"
     sequence:
       - service: select.select_option
         target:
@@ -168,6 +168,9 @@ script:
           entity_id: number.gaggimate_target_temperature_setpoint
         data:
           value: 120
+      - wait_template: "{{ states('sensor.gaggimate_current_temperature') | float >= original_temp }}"
+        timeout: "00:05:00"
+        continue_on_timeout: true
       - delay:
           seconds: 30
       - service: number.set_value
@@ -175,6 +178,54 @@ script:
           entity_id: number.gaggimate_target_temperature_setpoint
         data:
           value: "{{ original_temp }}"
+    mode: single
+```
+
+### Cooldown: Safe Post-Session Shutdown
+
+Switches to Hot Water mode with a 0°C target and repeatedly dispenses water through the steam wand until the boiler temperature drops below 30°C, then restores the original settings. Make sure to open the steam valve and place a container underneath the wand before running this script.
+
+```yaml
+script:
+  gaggimate_cooldown:
+    alias: "GaggiMate Cooldown"
+    icon: mdi:snowflake
+    description: "Cool the machine down by dispensing hot water until temperature is below 30°C"
+    sequence:
+      - service: select.select_option
+        target:
+          entity_id: select.gaggimate_mode
+        data:
+          option: "Hot Water"
+      - wait_template: "{{ states('sensor.gaggimate_mode') == 'Hot Water' }}"
+        timeout: "00:00:10"
+        continue_on_timeout: false
+      - variables:
+          original_water_temp: "{{ states('sensor.gaggimate_target_temperature') | float }}"
+      - service: number.set_value
+        target:
+          entity_id: number.gaggimate_target_temperature_setpoint
+        data:
+          value: 25
+      - service: button.press
+        target:
+          entity_id: button.gaggimate_start_brew
+      - wait_template: "{{ states('sensor.gaggimate_current_temperature') | float < 30 }}"
+        timeout: "00:10:00"
+        continue_on_timeout: true
+      - service: button.press
+        target:
+          entity_id: button.gaggimate_stop_brew
+      - service: number.set_value
+        target:
+          entity_id: number.gaggimate_target_temperature_setpoint
+        data:
+          value: "{{ original_water_temp }}"
+      - service: select.select_option
+        target:
+          entity_id: select.gaggimate_mode
+        data:
+          option: "Standby"
     mode: single
 ```
 
