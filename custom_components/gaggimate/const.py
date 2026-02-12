@@ -27,6 +27,8 @@ MSG_TYPE_FLUSH_START = "req:flush:start"
 MSG_TYPE_PROFILES_LIST = "req:profiles:list"
 MSG_TYPE_PROFILES_SELECT = "req:profiles:select"
 MSG_TYPE_OTA_SETTINGS = "req:ota-settings"
+MSG_TYPE_HISTORY_LIST = "req:history:list"
+MSG_TYPE_HISTORY_DELETE = "req:history:delete"
 
 # Machine modes
 class MachineMode(IntEnum):
@@ -82,3 +84,8 @@ UNIQUE_ID_TARGET_VOLUME = "target_shot_volume"
 UNIQUE_ID_SHOT_VOLUME_PROGRESS = "shot_volume_progress"
 UNIQUE_ID_STATUS = "status"
 UNIQUE_ID_PROCESS_PHASE = "process_phase"
+
+# Services
+ATTR_MAX_SHOTS = "max_shots"
+SERVICE_TRIM_SHOT_HISTORY = "trim_shot_history"
+DATA_SERVICES = f"{DOMAIN}_services"

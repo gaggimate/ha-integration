@@ -23,4 +23,18 @@
       "cannot_connect": "Cannot connect to discovered device."
     }
   }
+  ,
+  "services": {
+    "trim_shot_history": {
+      "name": "Trim shot history",
+      "description": "Delete oldest shots so that only the specified number of most recent shots remain on the device.",
+      "fields": {
+        "max_shots": {
+          "name": "Maximum shots to keep",
+          "description": "Keep this many newest shots; older shots will be removed.",
+          "example": 50
+        }
+      }
+    }
+  }
 }

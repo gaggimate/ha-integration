@@ -1,0 +1,14 @@
+trim_shot_history:
+  name: Trim shot history
+  description: Delete oldest shots so that at most the specified number remain on the device.
+  fields:
+    max_shots:
+      name: Maximum shots to keep
+      description: Maximum number of most recent shots to keep on the device. Older shots beyond this number will be deleted.
+      required: true
+      example: 50
+      selector:
+        number:
+          min: 1
+          max: 1000
+          step: 1

@@ -25,6 +25,8 @@ from .const import (
     MSG_TYPE_TEMP_LOWER,
     MSG_TYPE_TEMP_RAISE,
     MachineMode,
+    MSG_TYPE_HISTORY_DELETE,
+    MSG_TYPE_HISTORY_LIST,
     WS_CONNECT_TIMEOUT,
     WS_RECONNECT_DELAYS,
     WS_REQUEST_TIMEOUT,
@@ -329,6 +331,20 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             await self.send_message({"tp": MSG_TYPE_OTA_SETTINGS})
         except UpdateFailed as err:
             _LOGGER.debug("Failed to request OTA settings: %s", err)
+
+    async def request_history_list(self) -> list[dict[str, Any]]:
+        """Fetch shot history list from the device."""
+        response = await self._request({"tp": MSG_TYPE_HISTORY_LIST})
+        history = response.get("history")
+        if history is None:
+            raise UpdateFailed("History list missing in response")
+        if not isinstance(history, list):
+            raise UpdateFailed("Invalid history list format")
+        return history
+
+    async def delete_history_item(self, shot_id: int | str) -> None:
+        """Delete a shot history item by ID."""
+        await self._request({"tp": MSG_TYPE_HISTORY_DELETE, "id": str(shot_id)})
 
     @property
     def profiles(self) -> dict[str, str]:

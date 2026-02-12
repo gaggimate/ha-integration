@@ -18,4 +18,18 @@
       "already_configured": "Denne enhed er allerede konfigureret."
     }
   }
+  ,
+  "services": {
+    "trim_shot_history": {
+      "name": "Trim skudhistorik",
+      "description": "Slet ældste skud så kun det angivne antal nyeste skud bliver på enheden.",
+      "fields": {
+        "max_shots": {
+          "name": "Maksimalt antal skud at beholde",
+          "description": "Behold dette antal nyeste skud; ældre skud fjernes.",
+          "example": 50
+        }
+      }
+    }
+  }
 }

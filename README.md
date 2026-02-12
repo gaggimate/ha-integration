@@ -14,6 +14,7 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 - ⚖️ **Scale Integration** - Monitor weight from connected BLE scales
 - 🔄 **Firmware Updates** - Track firmware versions and available updates
 - 🏠 **Native HA Integration** - Uses standard Home Assistant entity types for seamless automation
+- 🧹 **Shot History Maintenance** - Built-in service to trim stored shots and keep only the newest entries
 
 ## Supported Entities
 
@@ -51,6 +52,35 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Stop Brew | Button | Stop active process (brew or steam) |
 | Start Steam | Button | Begin steaming operation |
 | Flush | Button | Trigger flush cycle |
+| Trim Shot History | Service | Remove oldest stored shots, keeping only a specified maximum |
+
+## Services
+
+### `gaggimate.trim_shot_history`
+
+Deletes the oldest shot logs on each connected GaggiMate so that no more than `max_shots` remain.
+
+Example automation:
+
+```yaml
+service: gaggimate.trim_shot_history
+data:
+  max_shots: 10
+```
+
+Daily trim at midnight keeping the 5 newest shots:
+
+```yaml
+automation:
+  - alias: "GaggiMate: Daily trim shot history"
+    trigger:
+      - platform: time
+        at: "00:00:00"
+    action:
+      - service: gaggimate.trim_shot_history
+        data:
+          max_shots: 10
+```
 
 ## Installation
 
