@@ -307,6 +307,12 @@ script:
     mode: single
 ```
 
+## Example Dashboard
+
+An example Home Assistant dashboard is available in the [`examples/dashboard`](examples/dashboard/) folder. The dashboard aims to be a full GaggiMate control panel, allowing you to operate the machine and monitor your shot. See the [dashboard README](examples/dashboard/README.md) for setup instructions.
+
+<img src="examples/dashboard/screenshots/dashboard.png" alt="GaggiMate Dashboard" width="25%">
+
 ## Troubleshooting
 
 ### Connection Issues

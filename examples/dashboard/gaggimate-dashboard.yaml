@@ -1,0 +1,398 @@
+title: GaggiMate
+views:
+  - title: Control
+    icon: mdi:coffee
+    panel: true
+    cards: []
+    type: sections
+    sections:
+      - type: grid
+        cards:
+          - type: vertical-stack
+            cards:
+              - type: horizontal-stack
+                cards:
+                  - show_name: true
+                    show_icon: true
+                    type: button
+                    entity: select.gaggimate_mode
+                    name: Standby
+                    icon: mdi:power-standby
+                    icon_height: 40px
+                    visibility:
+                      - condition: state
+                        entity: select.gaggimate_mode
+                        state: Standby
+                    tap_action:
+                      action: call-service
+                      service: select.select_option
+                      target:
+                        entity_id: select.gaggimate_mode
+                      data:
+                        option: Standby
+                  - type: button
+                    entity: select.gaggimate_mode
+                    name: Standby
+                    icon: mdi:power-standby
+                    icon_height: 40px
+                    color: disabled
+                    visibility:
+                      - condition: state
+                        entity: select.gaggimate_mode
+                        state_not: Standby
+                    tap_action:
+                      action: call-service
+                      service: select.select_option
+                      target:
+                        entity_id: select.gaggimate_mode
+                      data:
+                        option: Standby
+                  - type: button
+                    entity: select.gaggimate_mode
+                    name: Brew
+                    icon: mdi:coffee
+                    icon_height: 40px
+                    visibility:
+                      - condition: state
+                        entity: select.gaggimate_mode
+                        state: Brew
+                    tap_action:
+                      action: call-service
+                      service: select.select_option
+                      target:
+                        entity_id: select.gaggimate_mode
+                      data:
+                        option: Brew
+                  - type: button
+                    entity: select.gaggimate_mode
+                    name: Brew
+                    icon: mdi:coffee
+                    icon_height: 40px
+                    color: disabled
+                    visibility:
+                      - condition: state
+                        entity: select.gaggimate_mode
+                        state_not: Brew
+                    tap_action:
+                      action: call-service
+                      service: select.select_option
+                      target:
+                        entity_id: select.gaggimate_mode
+                      data:
+                        option: Brew
+                  - type: button
+                    entity: select.gaggimate_mode
+                    name: Steam
+                    icon: mdi:cloud
+                    icon_height: 40px
+                    visibility:
+                      - condition: state
+                        entity: select.gaggimate_mode
+                        state: Steam
+                    tap_action:
+                      action: call-service
+                      service: select.select_option
+                      target:
+                        entity_id: select.gaggimate_mode
+                      data:
+                        option: Steam
+                  - type: button
+                    entity: select.gaggimate_mode
+                    name: Steam
+                    icon: mdi:cloud
+                    icon_height: 40px
+                    color: disabled
+                    visibility:
+                      - condition: state
+                        entity: select.gaggimate_mode
+                        state_not: Steam
+                    tap_action:
+                      action: call-service
+                      service: select.select_option
+                      target:
+                        entity_id: select.gaggimate_mode
+                      data:
+                        option: Steam
+                  - type: button
+                    entity: select.gaggimate_mode
+                    name: Water
+                    icon: mdi:water
+                    icon_height: 40px
+                    visibility:
+                      - condition: state
+                        entity: select.gaggimate_mode
+                        state: Hot Water
+                    tap_action:
+                      action: call-service
+                      service: select.select_option
+                      target:
+                        entity_id: select.gaggimate_mode
+                      data:
+                        option: Hot Water
+                  - type: button
+                    entity: select.gaggimate_mode
+                    name: Water
+                    icon: mdi:water
+                    icon_height: 40px
+                    color: disabled
+                    visibility:
+                      - condition: state
+                        entity: select.gaggimate_mode
+                        state_not: Hot Water
+                    tap_action:
+                      action: call-service
+                      service: select.select_option
+                      target:
+                        entity_id: select.gaggimate_mode
+                      data:
+                        option: Hot Water
+                  - type: button
+                    entity: select.gaggimate_mode
+                    name: Grind
+                    icon: mdi:grain
+                    icon_height: 40px
+                    visibility:
+                      - condition: state
+                        entity: select.gaggimate_mode
+                        state: Grind
+                    tap_action:
+                      action: call-service
+                      service: select.select_option
+                      target:
+                        entity_id: select.gaggimate_mode
+                      data:
+                        option: Grind
+                  - type: button
+                    entity: select.gaggimate_mode
+                    name: Grind
+                    icon: mdi:grain
+                    icon_height: 40px
+                    color: disabled
+                    visibility:
+                      - condition: state
+                        entity: select.gaggimate_mode
+                        state_not: Grind
+                    tap_action:
+                      action: call-service
+                      service: select.select_option
+                      target:
+                        entity_id: select.gaggimate_mode
+                      data:
+                        option: Grind
+              - type: entities
+                show_header_toggle: false
+                entities:
+                  - entity: select.gaggimate_profile
+                    name: Profile
+                state_color: false
+              - type: markdown
+                content: >
+                  Status: **{% set s = states('sensor.gaggimate_status') %}{% if
+                  s == 'Brewing' %}☕{% elif s == 'Steaming' %}💨{% else %}😴{%
+                  endif %} {{ s }}** {% if
+                  states('sensor.gaggimate_process_phase') not in ['unknown',
+                  'unavailable', 'None'] %} — {{
+                  states('sensor.gaggimate_process_phase') }} {% endif %}
+              - type: grid
+                columns: 4
+                square: false
+                cards:
+                  - show_name: true
+                    show_icon: true
+                    type: button
+                    entity: button.gaggimate_start_brew
+                    name: Start
+                    icon: mdi:coffee
+                    tap_action:
+                      action: toggle
+                  - type: button
+                    entity: button.gaggimate_stop_brew
+                    name: Stop
+                    icon: mdi:stop
+                    tap_action:
+                      action: toggle
+                  - type: button
+                    entity: button.gaggimate_start_steam
+                    name: Steam
+                    icon: mdi:cloud
+                    tap_action:
+                      action: toggle
+                  - type: button
+                    entity: button.gaggimate_flush
+                    name: Flush
+                    icon: mdi:water-pump
+                    tap_action:
+                      action: toggle
+          - type: horizontal-stack
+            cards:
+              - type: tile
+                entity: sensor.gaggimate_current_temperature
+                name: Temp
+                icon: mdi:thermometer
+                vertical: false
+                features_position: bottom
+              - type: tile
+                entity: number.gaggimate_target_temperature_setpoint
+                name: Target
+                icon: mdi:target
+                vertical: false
+                features_position: bottom
+              - type: tile
+                entity: sensor.gaggimate_current_weight
+                name: Weight
+                show_entity_picture: false
+                hide_state: false
+                vertical: false
+                features_position: bottom
+      - type: grid
+        cards:
+          - type: history-graph
+            refresh_interval: 10
+            entities:
+              - entity: sensor.gaggimate_current_temperature
+                name: Temp
+              - entity: sensor.gaggimate_target_temperature
+                name: Target
+            grid_options:
+              columns: 12
+              rows: 4
+            hours_to_show: 0.05
+      - type: grid
+        cards:
+          - type: horizontal-stack
+            cards:
+              - show_name: true
+                show_icon: true
+                type: button
+                entity: script.gaggimate_turbo_preheat
+                name: Turbo Preheat
+              - show_name: true
+                show_icon: true
+                type: button
+                entity: script.gaggimate_cooldown_to_brew_temp
+                name: Cooldown to Brew Temp
+              - show_name: true
+                show_icon: true
+                type: button
+                entity: script.gaggimate_cooldown
+                name: Cooldown Machine
+  - type: panel
+    path: ''
+    cards:
+      - type: history-graph
+        title: GaggiMate Overview
+        hours_to_show: 0.033
+        refresh_interval: 1
+        entities:
+          - entity: sensor.gaggimate_current_temperature
+            name: Temperature
+          - entity: sensor.gaggimate_target_temperature
+            name: Target Temp
+          - entity: sensor.gaggimate_current_pressure
+            name: Pressure
+          - entity: sensor.gaggimate_target_pressure
+            name: Target Pressure
+          - entity: sensor.gaggimate_pump_flow
+            name: Flow
+          - entity: sensor.gaggimate_current_weight
+            name: Weight
+    title: Graphs
+  - type: panel
+    path: ''
+    cards:
+      - type: custom:apexcharts-card
+        header:
+          title: GaggiMate Overview
+          show: true
+          show_states: true
+          colorize_states: true
+        graph_span: 2min
+        update_interval: 1s
+        yaxis:
+          - id: temp
+            min: 0
+            apex_config:
+              title:
+                text: Temperature (°C)
+                style:
+                  color: '#F0561D'
+                  fontSize: 12px
+              tickAmount: 5
+              labels:
+                style:
+                  colors: '#F0561D'
+          - id: pressure
+            opposite: true
+            min: 0
+            max: 13
+            apex_config:
+              title:
+                text: Pressure (bar) / Flow (mL/s)
+                style:
+                  color: '#0066CC'
+                  fontSize: 12px
+              tickAmount: 5
+              labels:
+                style:
+                  colors: '#0066CC'
+          - id: weight
+            opposite: true
+            min: 0
+            max: 50
+            show: false
+            apex_config:
+              title:
+                text: Weight (g)
+                style:
+                  color: '#8B5CF6'
+                  fontSize: 12px
+              labels:
+                style:
+                  colors: '#8B5CF6'
+        apex_config:
+          chart:
+            height: 350px
+          stroke:
+            width: 3
+          legend:
+            show: true
+            position: top
+          tooltip:
+            shared: true
+            intersect: false
+        series:
+          - entity: sensor.gaggimate_current_temperature
+            name: Temperature
+            yaxis_id: temp
+            color: '#F0561D'
+            stroke_width: 3
+          - entity: sensor.gaggimate_target_temperature
+            name: Target Temp
+            yaxis_id: temp
+            color: '#731F00'
+            stroke_width: 2
+            opacity: 0.8
+            stroke_dash: 6
+          - entity: sensor.gaggimate_current_pressure
+            name: Pressure
+            yaxis_id: pressure
+            color: '#0066CC'
+            stroke_width: 3
+          - entity: sensor.gaggimate_target_pressure
+            name: Target Pressure
+            yaxis_id: pressure
+            color: '#003366'
+            stroke_width: 2
+            opacity: 0.8
+            stroke_dash: 6
+          - entity: sensor.gaggimate_pump_flow
+            name: Flow
+            yaxis_id: pressure
+            color: '#63993D'
+            stroke_width: 3
+          - entity: sensor.gaggimate_current_weight
+            name: Weight
+            yaxis_id: weight
+            color: '#8B5CF6'
+            stroke_width: 3
+    title: Apexchart graphs
