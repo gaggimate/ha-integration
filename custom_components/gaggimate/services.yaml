@@ -12,3 +12,10 @@ trim_shot_history:
           min: 1
           max: 1000
           step: 1
+    keep_annotated:
+      name: Preserve annotated shots
+      description: Keep shots that have notes, rating, or other manual annotations; they will not be deleted even if older than the limit.
+      required: false
+      example: false
+      selector:
+        boolean: {}

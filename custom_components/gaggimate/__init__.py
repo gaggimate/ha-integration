@@ -13,6 +13,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import (
     ATTR_MAX_SHOTS,
+    ATTR_KEEP_ANNOTATED,
     DATA_SERVICES,
     DEFAULT_PORT,
     DOMAIN,
@@ -22,7 +23,12 @@ from .coordinator import GaggiMateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-SERVICE_TRIM_SCHEMA = vol.Schema({vol.Required(ATTR_MAX_SHOTS): cv.positive_int})
+SERVICE_TRIM_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_MAX_SHOTS): cv.positive_int,
+        vol.Optional(ATTR_KEEP_ANNOTATED, default=False): cv.boolean,
+    }
+)
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -57,6 +63,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         max_shots = call.data.get(ATTR_MAX_SHOTS)
         if not isinstance(max_shots, int) or max_shots <= 0:
             raise ValueError("max_shots must be a positive integer")
+        keep_annotated: bool = bool(call.data.get(ATTR_KEEP_ANNOTATED))
 
         coordinators: list[GaggiMateCoordinator] = list(hass.data.get(DOMAIN, {}).values())
         if not coordinators:
@@ -91,6 +98,51 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 continue
 
             to_delete = sorted_history[:-max_shots]
+
+            if keep_annotated and to_delete:
+                filtered: list[dict] = []
+                preserved = 0
+
+                def _has_annotation(notes: dict) -> bool:
+                    if not isinstance(notes, dict) or not notes:
+                        return False
+                    for value in notes.values():
+                        if value in (None, "", 0, 0.0, False):
+                            continue
+                        return True
+                    return False
+
+                for item in to_delete:
+                    shot_id = item.get("id")
+                    if shot_id is None:
+                        continue
+                    try:
+                        notes = await coordinator.get_history_notes(shot_id)
+                    except Exception as err:  # noqa: BLE001
+                        _LOGGER.warning(
+                            "Skipping deletion of shot %s on %s: failed to fetch notes (%s)",
+                            shot_id,
+                            coordinator.host,
+                            err,
+                        )
+                        preserved += 1
+                        continue
+
+                    if _has_annotation(notes):
+                        preserved += 1
+                        continue
+
+                    filtered.append(item)
+                    await asyncio.sleep(0)
+
+                if preserved:
+                    _LOGGER.info(
+                        "Preserved %s annotated shots on %s",
+                        preserved,
+                        coordinator.host,
+                    )
+
+                to_delete = filtered
             deleted = 0
             failures: list[str] = []
             for idx, item in enumerate(to_delete, start=1):

@@ -64,6 +64,38 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Start Brew | Button | Begin brewing operation |
 | Stop Brew | Button | Stop active process (brew or steam) |
 | Flush | Button | Trigger flush cycle |
+| Trim Shot History | Service | Remove oldest stored shots, keeping only a specified maximum |
+
+## Services
+
+### `gaggimate.trim_shot_history`
+
+Deletes the oldest shot logs on each connected GaggiMate so that no more than `max_shots` remain.
+Optionally set `keep_annotated: true` to preserve shots that have notes, ratings, or other manual annotations.
+
+Example automation:
+
+```yaml
+service: gaggimate.trim_shot_history
+data:
+  max_shots: 5
+  keep_annotated: true
+```
+
+Daily trim at midnight keeping the 5 newest shots:
+
+```yaml
+automation:
+  - alias: "GaggiMate: Daily trim shot history"
+    trigger:
+      - platform: time
+        at: "00:00:00"
+    action:
+      - service: gaggimate.trim_shot_history
+        data:
+          max_shots: 5
+          keep_annotated: true
+```
 
 ## Installation
 

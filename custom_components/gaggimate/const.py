@@ -29,6 +29,7 @@ MSG_TYPE_PROFILES_SELECT = "req:profiles:select"
 MSG_TYPE_OTA_SETTINGS = "req:ota-settings"
 MSG_TYPE_HISTORY_LIST = "req:history:list"
 MSG_TYPE_HISTORY_DELETE = "req:history:delete"
+MSG_TYPE_HISTORY_NOTES_GET = "req:history:notes:get"
 
 # Machine modes
 class MachineMode(IntEnum):
@@ -86,5 +87,6 @@ UNIQUE_ID_PROCESS_PHASE = "process_phase"
 
 # Services
 ATTR_MAX_SHOTS = "max_shots"
+ATTR_KEEP_ANNOTATED = "keep_annotated"
 SERVICE_TRIM_SHOT_HISTORY = "trim_shot_history"
 DATA_SERVICES = f"{DOMAIN}_services"

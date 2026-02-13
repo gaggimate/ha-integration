@@ -33,6 +33,11 @@
           "name": "Maximum shots to keep",
           "description": "Keep this many newest shots; older shots will be removed.",
           "example": 50
+        },
+        "keep_annotated": {
+          "name": "Preserve annotated shots",
+          "description": "Do not delete shots that have notes, ratings, or other manual annotations.",
+          "example": false
         }
       }
     }

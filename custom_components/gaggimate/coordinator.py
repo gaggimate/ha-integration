@@ -27,6 +27,7 @@ from .const import (
     MachineMode,
     MSG_TYPE_HISTORY_DELETE,
     MSG_TYPE_HISTORY_LIST,
+    MSG_TYPE_HISTORY_NOTES_GET,
     WS_CONNECT_TIMEOUT,
     WS_RECONNECT_DELAYS,
     WS_REQUEST_TIMEOUT,
@@ -339,6 +340,16 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
     async def delete_history_item(self, shot_id: int | str) -> None:
         """Delete a shot history item by ID."""
         await self._request({"tp": MSG_TYPE_HISTORY_DELETE, "id": str(shot_id)})
+
+    async def get_history_notes(self, shot_id: int | str) -> dict[str, Any]:
+        """Fetch notes for a shot; returns empty dict if none."""
+        response = await self._request({"tp": MSG_TYPE_HISTORY_NOTES_GET, "id": str(shot_id)})
+        notes = response.get("notes")
+        if notes is None:
+            return {}
+        if not isinstance(notes, dict):
+            raise UpdateFailed("Invalid notes format")
+        return notes
 
     @property
     def profiles(self) -> dict[str, str]:
