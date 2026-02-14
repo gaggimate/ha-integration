@@ -5,6 +5,19 @@
 
 Control and monitor your GaggiMate-equipped espresso machine directly from Home Assistant. This custom integration provides comprehensive control over your machine's temperature, brewing modes, profiles, and more through native Home Assistant entities.
 
+## Table of Contents
+
+- [Features](#features)
+- [Supported Entities](#supported-entities)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Services](#services)
+- [Automation Examples](#automation-examples)
+- [Example Dashboard](#example-dashboard)
+- [Troubleshooting](#troubleshooting)
+- [Support](#support)
+- [Contributing](#contributing)
+
 ## Features
 
 - 🌡️ **Real-time Temperature Monitoring** - Track current and target temperatures
@@ -52,35 +65,6 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Stop Brew | Button | Stop active process (brew or steam) |
 | Start Steam | Button | Begin steaming operation |
 | Flush | Button | Trigger flush cycle |
-| Trim Shot History | Service | Remove oldest stored shots, keeping only a specified maximum |
-
-## Services
-
-### `gaggimate.trim_shot_history`
-
-Deletes the oldest shot logs on each connected GaggiMate so that no more than `max_shots` remain.
-
-Example automation:
-
-```yaml
-service: gaggimate.trim_shot_history
-data:
-  max_shots: 10
-```
-
-Daily trim at midnight keeping the 5 newest shots:
-
-```yaml
-automation:
-  - alias: "GaggiMate: Daily trim shot history"
-    trigger:
-      - platform: time
-        at: "00:00:00"
-    action:
-      - service: gaggimate.trim_shot_history
-        data:
-          max_shots: 10
-```
 
 ## Installation
 
@@ -124,7 +108,35 @@ Or add the repository manually:
 
 The integration will automatically discover all available entities and create them in Home Assistant.
 
-## Automations Examples
+## Services
+
+### `gaggimate.trim_shot_history`
+
+Deletes the oldest shot logs on each connected GaggiMate so that no more than `max_shots` remain.
+
+Example automation:
+
+```yaml
+service: gaggimate.trim_shot_history
+data:
+  max_shots: 10
+```
+
+Daily trim at midnight keeping the 5 newest shots:
+
+```yaml
+automation:
+  - alias: "GaggiMate: Daily trim shot history"
+    trigger:
+      - platform: time
+        at: "00:00:00"
+    action:
+      - service: gaggimate.trim_shot_history
+        data:
+          max_shots: 10
+```
+
+## Automation Examples
 
 ### Basic Automation: Morning Warm-Up
 
@@ -297,7 +309,7 @@ script:
 
 ### Cooldown to Brew Temp
 
-After steaming, the boiler is well above brew temperature. This script switches to Brew mode, reads the profile's target temperature, and repeatedly triggers flush cycles through the group head until the boiler cools to within 10°C of the brew target. No steam wand or container needed — just leave the portafilter in or use a blind basket.
+After steaming, the boiler is well above brew temperature. This script switches to Brew mode, reads the profile's target temperature, and repeatedly triggers flush cycles through the group head until the boiler cools to within 10°C of the brew target. Remove the portafilter and flush to the drip tray or a container.
 
 ```yaml
 script:
