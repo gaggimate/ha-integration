@@ -93,7 +93,7 @@ Or add the repository manually:
 1. Open HACS in your Home Assistant instance
 2. Click on the three dots menu (⋮) in the top right corner
 3. Select **Custom repositories**
-4. Add this repository URL: `https://github.com/DevNullGamer/ha-integration`
+4. Add this repository URL: `https://github.com/gaggimate/ha-integration`
 5. Select **Integration** as the category
 6. Click **Add**
 7. Search for "GaggiMate" in HACS
@@ -102,7 +102,7 @@ Or add the repository manually:
 
 ### Manual Installation
 
-1. Download the latest release from the [releases page](https://github.com/DevNullGamer/ha-integration/releases)
+1. Download the latest release from the [releases page](https://github.com/gaggimate/ha-integration/releases)
 2. Extract the `custom_components/gaggimate` folder
 3. Copy it to your Home Assistant `custom_components` directory:
    ```
@@ -371,7 +371,7 @@ An example Home Assistant dashboard is available in the [`examples/dashboard`](e
 ## Support
 
 - **Documentation**: [GaggiMate Docs](https://docs.gaggimate.eu/)
-- **Issues**: [GitHub Issues](https://github.com/DevNullGamer/ha-integration/issues)
+- **Issues**: [GitHub Issues](https://github.com/gaggimate/ha-integration/issues)
 - **Main GaggiMate Project**: [jniebuhr/gaggimate](https://github.com/jniebuhr/gaggimate)
 - **Shop**: [shop.gaggimate.eu](https://shop.gaggimate.eu/)
 
