@@ -194,7 +194,7 @@ views:
                   'unavailable', 'None'] %} — {{
                   states('sensor.gaggimate_process_phase') }} {% endif %}
               - type: grid
-                columns: 4
+                columns: 3
                 square: false
                 cards:
                   - show_name: true
@@ -209,12 +209,6 @@ views:
                     entity: button.gaggimate_stop_brew
                     name: Stop
                     icon: mdi:stop
-                    tap_action:
-                      action: toggle
-                  - type: button
-                    entity: button.gaggimate_start_steam
-                    name: Steam
-                    icon: mdi:cloud
                     tap_action:
                       action: toggle
                   - type: button

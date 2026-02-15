@@ -22,7 +22,7 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 
 - 🌡️ **Real-time Temperature Monitoring** - Track current and target temperatures
 - ☕ **Mode Control** - Switch between Standby, Brew, Steam, Hot Water, and Grind modes
-- 🎮 **Full Machine Control** - Start/stop brewing, steaming, and flushing operations
+- 🎮 **Full Machine Control** - Start/stop brewing and flush cycles; switch modes for steam, water, or grind
 - 📊 **Profile Selection** - Select brewing profiles
 - ⚖️ **Scale Integration** - Monitor weight from connected BLE scales
 - 🔄 **Firmware Updates** - Track firmware versions and available updates
@@ -63,7 +63,6 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Target Temperature Setpoint | Number | Set desired temperature (0–160 °C) |
 | Start Brew | Button | Begin brewing operation |
 | Stop Brew | Button | Stop active process (brew or steam) |
-| Start Steam | Button | Begin steaming operation |
 | Flush | Button | Trigger flush cycle |
 
 ## Installation

@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, UNIQUE_ID_BREW_START, UNIQUE_ID_BREW_STOP, UNIQUE_ID_FLUSH, UNIQUE_ID_STEAM_START
+from .const import DOMAIN, UNIQUE_ID_BREW_START, UNIQUE_ID_BREW_STOP, UNIQUE_ID_FLUSH
 from .coordinator import GaggiMateCoordinator
 from .sensor import GaggiMateEntity
 
@@ -26,7 +26,6 @@ async def async_setup_entry(
     entities = [
         GaggiMateStartBrewButton(coordinator, entry),
         GaggiMateStopBrewButton(coordinator, entry),
-        GaggiMateStartSteamButton(coordinator, entry),
         GaggiMateFlushButton(coordinator, entry),
     ]
 
@@ -72,27 +71,6 @@ class GaggiMateStopBrewButton(GaggiMateEntity, ButtonEntity):
             _LOGGER.debug("Stopped brew on GaggiMate")
         except Exception as err:
             _LOGGER.error("Failed to stop brew: %s", err)
-            raise
-
-
-class GaggiMateStartSteamButton(GaggiMateEntity, ButtonEntity):
-    """Start steam button."""
-
-    _attr_icon = "mdi:cloud"
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        """Initialize the button."""
-        super().__init__(coordinator, entry)
-        self._attr_name = "Start Steam"
-        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_STEAM_START}"
-
-    async def async_press(self) -> None:
-        """Handle the button press."""
-        try:
-            await self.coordinator.start_steam()
-            _LOGGER.debug("Started steam on GaggiMate")
-        except Exception as err:
-            _LOGGER.error("Failed to start steam: %s", err)
             raise
 
 

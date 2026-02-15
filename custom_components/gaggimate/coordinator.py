@@ -304,12 +304,6 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         """Stop brewing."""
         await self.send_message({"tp": MSG_TYPE_PROCESS_DEACTIVATE})
 
-    async def start_steam(self) -> None:
-        """Start steam process."""
-        await self.set_mode(MachineMode.STEAM)
-        await asyncio.sleep(0.1)
-        await self.send_message({"tp": MSG_TYPE_PROCESS_ACTIVATE})
-
     async def start_flush(self) -> None:
         """Start a flush cycle."""
         await self._request({"tp": MSG_TYPE_FLUSH_START})
