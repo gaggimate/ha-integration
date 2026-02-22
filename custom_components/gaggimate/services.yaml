@@ -14,7 +14,7 @@ trim_shot_history:
           step: 1
     keep_annotated:
       name: Preserve annotated shots
-      description: Keep shots that have notes, rating, or other manual annotations; they will not be deleted even if older than the limit.
+      description: Exclude annotated shots from trimming; max_shots applies only to non-annotated shots.
       required: false
       example: false
       selector:

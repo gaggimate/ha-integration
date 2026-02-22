@@ -88,21 +88,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             sorted_history = sorted(history, key=_sort_key)
 
-            if len(sorted_history) <= max_shots:
-                _LOGGER.info(
-                    "Shot history trim skipped for %s: %s entries <= max_shots=%s",
-                    coordinator.host,
-                    len(sorted_history),
-                    max_shots,
-                )
-                continue
-
-            to_delete = sorted_history[:-max_shots]
-
-            if keep_annotated and to_delete:
-                filtered: list[dict] = []
-                preserved = 0
-
+            if keep_annotated:
                 _ANNOTATION_FIELDS = ("rating", "beanType", "grindSetting", "notes")
 
                 def _has_annotation(notes: dict) -> bool:
@@ -115,37 +101,61 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         return True
                     return False
 
-                for item in to_delete:
+                # Separate annotated from non-annotated shots
+                non_annotated: list[dict] = []
+                annotated_count = 0
+                for item in sorted_history:
                     shot_id = item.get("id")
                     if shot_id is None:
+                        non_annotated.append(item)
                         continue
                     try:
                         notes = await coordinator.get_history_notes(shot_id)
                     except Exception as err:  # noqa: BLE001
                         _LOGGER.warning(
-                            "Skipping deletion of shot %s on %s: failed to fetch notes (%s)",
+                            "Cannot determine annotation status for shot %s on %s: %s",
                             shot_id,
                             coordinator.host,
                             err,
                         )
-                        preserved += 1
+                        annotated_count += 1
                         continue
 
                     if _has_annotation(notes):
-                        preserved += 1
-                        continue
-
-                    filtered.append(item)
+                        annotated_count += 1
+                    else:
+                        non_annotated.append(item)
                     await asyncio.sleep(0)
 
-                if preserved:
+                if annotated_count:
                     _LOGGER.info(
                         "Preserved %s annotated shots on %s",
-                        preserved,
+                        annotated_count,
                         coordinator.host,
                     )
 
-                to_delete = filtered
+                # Trim only the non-annotated shots to max_shots
+                if len(non_annotated) <= max_shots:
+                    _LOGGER.info(
+                        "Shot history trim skipped for %s: %s non-annotated entries <= max_shots=%s",
+                        coordinator.host,
+                        len(non_annotated),
+                        max_shots,
+                    )
+                    continue
+
+                to_delete = non_annotated[:-max_shots]
+            else:
+                if len(sorted_history) <= max_shots:
+                    _LOGGER.info(
+                        "Shot history trim skipped for %s: %s entries <= max_shots=%s",
+                        coordinator.host,
+                        len(sorted_history),
+                        max_shots,
+                    )
+                    continue
+
+                to_delete = sorted_history[:-max_shots]
             deleted = 0
             failures: list[str] = []
             for idx, item in enumerate(to_delete, start=1):

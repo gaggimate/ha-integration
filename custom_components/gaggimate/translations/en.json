@@ -36,7 +36,7 @@
         },
         "keep_annotated": {
           "name": "Preserve annotated shots",
-          "description": "Do not delete shots that have notes, ratings, or other manual annotations.",
+          "description": "Exclude annotated shots from trimming; max_shots applies only to non-annotated shots.",
           "example": false
         }
       }

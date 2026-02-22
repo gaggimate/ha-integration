@@ -70,8 +70,8 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 
 ### `gaggimate.trim_shot_history`
 
-Deletes the oldest shot logs on each connected GaggiMate so that no more than `max_shots` remain.
-Optionally set `keep_annotated: true` to preserve shots that have notes, ratings, or other manual annotations.
+Deletes the oldest shot logs on each connected GaggiMate so that no more than `max_shots` non-annotated shots remain.
+When `keep_annotated: true` is set, shots with notes, ratings, bean type, or grind settings are excluded from trimming entirely; `max_shots` applies only to the remaining non-annotated shots.
 
 Example automation:
 

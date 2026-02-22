@@ -31,7 +31,7 @@
         },
         "keep_annotated": {
           "name": "Bevar annoterede skud",
-          "description": "Slet ikke skud der har noter, bedømmelser eller anden manuel annotation.",
+          "description": "Undtag annoterede skud fra trimning; max_shots gælder kun for ikke-annoterede skud.",
           "example": false
         }
       }
