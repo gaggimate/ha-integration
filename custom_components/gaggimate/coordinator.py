@@ -343,7 +343,8 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
     async def get_history_notes(self, shot_id: int | str) -> dict[str, Any]:
         """Fetch notes for a shot; returns empty dict if none."""
-        response = await self._request({"tp": MSG_TYPE_HISTORY_NOTES_GET, "id": str(shot_id)})
+        # Normalize ID to unpadded format to match how the firmware stores notes files
+        response = await self._request({"tp": MSG_TYPE_HISTORY_NOTES_GET, "id": str(int(shot_id))})
         notes = response.get("notes")
         if notes is None:
             return {}

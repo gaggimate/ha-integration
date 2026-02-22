@@ -103,10 +103,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 filtered: list[dict] = []
                 preserved = 0
 
+                _ANNOTATION_FIELDS = ("rating", "beanType", "grindSetting", "notes")
+
                 def _has_annotation(notes: dict) -> bool:
                     if not isinstance(notes, dict) or not notes:
                         return False
-                    for value in notes.values():
+                    for key in _ANNOTATION_FIELDS:
+                        value = notes.get(key)
                         if value in (None, "", 0, 0.0, False):
                             continue
                         return True
