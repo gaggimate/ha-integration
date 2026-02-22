@@ -66,37 +66,6 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Flush | Button | Trigger flush cycle |
 | Trim Shot History | Service | Remove oldest stored shots, keeping only a specified maximum |
 
-## Services
-
-### `gaggimate.trim_shot_history`
-
-Deletes the oldest shot logs on each connected GaggiMate so that no more than `max_shots` non-annotated shots remain.
-When `keep_annotated: true` is set, shots with notes, ratings, bean type, or grind settings are excluded from trimming entirely; `max_shots` applies only to the remaining non-annotated shots.
-
-Example automation:
-
-```yaml
-service: gaggimate.trim_shot_history
-data:
-  max_shots: 5
-  keep_annotated: true
-```
-
-Daily trim at midnight keeping the 5 newest shots:
-
-```yaml
-automation:
-  - alias: "GaggiMate: Daily trim shot history"
-    trigger:
-      - platform: time
-        at: "00:00:00"
-    action:
-      - service: gaggimate.trim_shot_history
-        data:
-          max_shots: 5
-          keep_annotated: true
-```
-
 ## Installation
 
 ### HACS (Recommended)
@@ -143,14 +112,16 @@ The integration will automatically discover all available entities and create th
 
 ### `gaggimate.trim_shot_history`
 
-Deletes the oldest shot logs on each connected GaggiMate so that no more than `max_shots` remain.
+Deletes the oldest shot logs on each connected GaggiMate so that no more than `max_shots` non-annotated shots remain.
+When `keep_annotated: true` is set, shots with notes, ratings, bean type, or grind settings are excluded from trimming entirely; `max_shots` applies only to the remaining non-annotated shots.
 
 Example automation:
 
 ```yaml
 service: gaggimate.trim_shot_history
 data:
-  max_shots: 10
+  max_shots: 5
+  keep_annotated: true
 ```
 
 Daily trim at midnight keeping the 5 newest shots:
@@ -163,7 +134,8 @@ trigger:
 action:
   - service: gaggimate.trim_shot_history
     data:
-      max_shots: 10
+      max_shots: 5
+      keep_annotated: true
 ```
 
 ## Automation Examples
