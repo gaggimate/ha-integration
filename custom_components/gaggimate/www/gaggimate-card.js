@@ -275,7 +275,8 @@ class GaggiMateCard extends LitElement {
     const zone1Color = (isHeating || tgtPct > 0) ? brand : "transparent";
     const zone2Color = isHeating ? brandMid : "transparent";
     const dotColor = isHeating ? brand : "#aaa";
-    const handleStroke = isDragging ? brand : (isHeating ? brandMid : "#aaa");
+    const idleStroke = isHeating ? brandMid : "#aaa";
+    const handleStroke = isDragging ? brand : idleStroke;
     const handleFill = isDragging ? brand : "white";
     const handleR = isDragging ? 5 : 3;
     return { zone1, zone2, zone1Color, zone2Color, dotColor, handleStroke, handleFill, handleR };
@@ -312,22 +313,26 @@ class GaggiMateCard extends LitElement {
   }
 
   // Render the data overlay (target value, separator, current value).
-  _renderDialData(tgt, cur, unit, decimals, isDragging, isHeating, buttonsEnabled, brand) {
-    const minusDisabled = !buttonsEnabled;
-    const plusDisabled = !buttonsEnabled;
+  _renderDialData({ tgt, cur, unit, decimals, isDragging, isHeating, buttonsEnabled, brand }) {
+    const hasButtons = buttonsEnabled !== undefined;
+    const isDisabled = !buttonsEnabled;
+    const disabledCls = isDisabled ? 'disabled' : '';
+    const heatFallback = hasButtons
+      ? html`<ha-icon class="heat-icon" icon="mdi:heat-wave"></ha-icon>`
+      : '';
     return html`
       <div class="d-data">
         <div class="v-tgt-row">
-          ${buttonsEnabled !== undefined ? html`
-            <button class="temp-btn ${minusDisabled ? 'disabled' : ''}"
-              @click="${() => { if (!minusDisabled) this._adjustTemp(-1); }}"
-              ?disabled="${minusDisabled}">−</button>
+          ${hasButtons ? html`
+            <button class="temp-btn ${disabledCls}"
+              @click="${() => { if (!isDisabled) this._adjustTemp(-1); }}"
+              ?disabled="${isDisabled}">−</button>
           ` : ''}
           <div class="v-tgt ${isDragging ? 'dragging' : ''}">${tgt.toFixed(decimals)}<span class="v-unit">${unit}</span></div>
-          ${buttonsEnabled !== undefined ? html`
-            <button class="temp-btn ${plusDisabled ? 'disabled' : ''}"
-              @click="${() => { if (!plusDisabled) this._adjustTemp(1); }}"
-              ?disabled="${plusDisabled}">+</button>
+          ${hasButtons ? html`
+            <button class="temp-btn ${disabledCls}"
+              @click="${() => { if (!isDisabled) this._adjustTemp(1); }}"
+              ?disabled="${isDisabled}">+</button>
           ` : ''}
         </div>
         <div class="v-sep"></div>
@@ -336,9 +341,7 @@ class GaggiMateCard extends LitElement {
           ${isHeating ? html`
             <ha-icon class="heat-icon active" icon="mdi:heat-wave"
               style="color:${brand}"></ha-icon>
-          ` : (buttonsEnabled !== undefined ? html`
-            <ha-icon class="heat-icon" icon="mdi:heat-wave"></ha-icon>
-          ` : '')}
+          ` : heatFallback}
         </div>
       </div>`;
   }
@@ -373,7 +376,7 @@ class GaggiMateCard extends LitElement {
         <div class="d-label">${label}</div>
         <div class="d-rel">
           ${this._renderDialSvg(geometry, colors, showButtons, onHandleDown)}
-          ${this._renderDialData(tgt, cur, unit, decimals, isDragging, isHeating, buttonsEnabled, brand)}
+          ${this._renderDialData({ tgt, cur, unit, decimals, isDragging, isHeating, buttonsEnabled, brand })}
         </div>
       </div>`;
   }
@@ -384,6 +387,8 @@ class GaggiMateCard extends LitElement {
     const mode = this.hass.states[`select.${slug}_mode`]?.state || "Standby";
     const profile = this.hass.states[`select.${slug}_profile`];
     const brand = this.config.color || "#ff9800";
+    const showGrinder = this.config.show_grinder !== false;
+    const showWeight = this.config.show_weight !== false;
     // Official integration uses "Hot Water" for the Water mode option value,
     // but we display it as "Water" to keep the 5 buttons fitting in the card.
     // modeOptions maps display label → actual HA option value.
@@ -392,7 +397,7 @@ class GaggiMateCard extends LitElement {
       { label: "Brew",     value: "Brew" },
       { label: "Steam",    value: "Steam" },
       { label: "Water",    value: "Hot Water" },
-      ...(this.config.show_grinder !== false ? [{ label: "Grind", value: "Grind" }] : []),
+      ...(showGrinder ? [{ label: "Grind", value: "Grind" }] : []),
     ];
 
     return html`
@@ -422,7 +427,7 @@ class GaggiMateCard extends LitElement {
           ${this._renderDial("TEMPERATURE", "current_temperature", "target_temperature", 110, true)}
           ${this._renderDial("PRESSURE", "current_pressure", "target_pressure", 15)}
         </div>
-        ${this.config.show_weight !== false ? html`
+        ${showWeight ? html`
           <div class="weight">
             <div class="w-sec"><div class="w-l">CURRENT</div><div>${this._getVal("current_weight").toFixed(1)}g</div></div>
             <div class="divider"></div>
