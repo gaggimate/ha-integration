@@ -215,6 +215,23 @@ def _get_mode_icon(data: dict[str, Any]) -> str:
         return "mdi:coffee-maker"
 
 
+class DeadbandFilter:
+    """Suppress value changes smaller than a deadband threshold."""
+
+    def __init__(self, deadband: float) -> None:
+        self._deadband = deadband
+        self._last_value: float | None = None
+
+    def __call__(self, value: float | None) -> float | None:
+        """Return *value* only when it exceeds the deadband from the last output."""
+        if value is None:
+            return None
+        if self._last_value is not None and abs(value - self._last_value) < self._deadband:
+            return self._last_value
+        self._last_value = value
+        return value
+
+
 def _quantize(value: Any, decimals: int) -> float | None:
     """Round numeric values to a fixed precision; return None on invalid input."""
     if value is None:
@@ -225,6 +242,9 @@ def _quantize(value: Any, decimals: int) -> float | None:
         return None
 
 
+_temp_deadband = DeadbandFilter(0.2)
+_pressure_deadband = DeadbandFilter(0.2)
+
 SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_CURRENT_TEMP,
@@ -234,7 +254,9 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         icon="mdi:thermometer",
         suggested_display_precision=1,
-        value_fn=lambda data, _: _quantize(data.get("ct"), 1),
+        value_fn=lambda data, _: _temp_deadband(_quantize(data.get("ct"), 1))
+        if data.get("m") == MachineMode.STANDBY
+        else _quantize(data.get("ct"), 1),
     ),
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_TARGET_TEMP,
@@ -300,7 +322,9 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfPressure.BAR,
         icon="mdi:gauge",
         suggested_display_precision=2,
-        value_fn=lambda data, _: _quantize(data.get("pr"), 2),
+        value_fn=lambda data, _: _pressure_deadband(_quantize(data.get("pr"), 2))
+        if data.get("m") == MachineMode.STANDBY
+        else _quantize(data.get("pr"), 2),
     ),
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_TARGET_PRESSURE,
