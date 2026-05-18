@@ -5,11 +5,12 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
+from contextlib import suppress
 
 import aiohttp
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
@@ -46,7 +47,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=None,  # We get push updates via WebSocket
+            update_interval=None,  # Push updates over WebSocket
         )
         self.host = host
         self.port = port
@@ -62,6 +63,10 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         self._profiles: dict[str, str] = {}
         self._ota_settings: dict[str, Any] = {}
 
+        # NEW: Protect connection logic and shutdown state
+        self._connect_lock = asyncio.Lock()
+        self._shutting_down = False
+
     @property
     def ws_url(self) -> str:
         """Return WebSocket URL."""
@@ -70,27 +75,39 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
     async def async_start(self) -> None:
         """Start the WebSocket connection."""
+        if self._shutting_down:
+            return
+
+        _LOGGER.warning("GaggiMate _connect() called")
         if self._session is None:
             self._session = aiohttp.ClientSession()
 
         await self._connect()
 
-        # Start availability checker
+        # Start availability checker once
         if self._availability_check_task is None:
             self._availability_check_task = asyncio.create_task(self._check_availability())
 
     async def async_shutdown(self) -> None:
-        """Shutdown the coordinator."""
+        """Shutdown the coordinator cleanly."""
+        self._shutting_down = True
+
         if self._availability_check_task:
             self._availability_check_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._availability_check_task
             self._availability_check_task = None
 
         if self._listen_task:
             self._listen_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._listen_task
             self._listen_task = None
 
         if self._reconnect_task:
             self._reconnect_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._reconnect_task
             self._reconnect_task = None
 
         if self._ws and not self._ws.closed:
@@ -102,35 +119,58 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             self._session = None
 
     async def _connect(self) -> None:
-        """Connect to WebSocket."""
-        try:
-            if self._session is None:
-                self._session = aiohttp.ClientSession()
-            _LOGGER.info("Connecting to GaggiMate at %s", self.ws_url)
-            self._ws = await self._session.ws_connect(
-                self.ws_url,
-                timeout=aiohttp.ClientTimeout(total=WS_CONNECT_TIMEOUT),
-                heartbeat=30,
-            )
-            _LOGGER.info("Successfully connected to GaggiMate")
-            self._reconnect_attempt = 0
+        """Connect to WebSocket, ensuring only one connection attempt at a time."""
+        _LOGGER.warning(">>> GAGGIMATE CONNECT ENTRY <<<")
+        _LOGGER.warning("ENTER _CONNECT BEFORE LOCK")
+        async with self._connect_lock:
+            _LOGGER.warning("ENTERED CONNECT LOCK")
+            if self._shutting_down:
+                return
 
-            # Start listening for messages
-            if self._listen_task:
+            # If already connected, do nothing
+            if self._ws and not self._ws.closed:
+                with suppress(Exception):
+                    await self._ws.close()
+                self._ws = None
+
+            # Kill stale listener if present
+            if self._listen_task and not self._listen_task.done():
                 self._listen_task.cancel()
-            self._listen_task = asyncio.create_task(self._listen())
+                with suppress(asyncio.CancelledError):
+                    await self._listen_task
+                self._listen_task = None
 
-            # Prime cached data in background to avoid blocking setup
-            self.hass.async_create_task(self.request_ota_settings())
-            self.hass.async_create_task(self.request_profiles_list())
+            try:
+                if self._session is None:
+                    self._session = aiohttp.ClientSession()
 
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            _LOGGER.error("Failed to connect to GaggiMate: %s", err)
-            await self._schedule_reconnect()
-            raise UpdateFailed(f"Failed to connect: {err}") from err
+                _LOGGER.info("Connecting to GaggiMate at %s", self.ws_url)
+
+                self._ws = await self._session.ws_connect(
+                    self.ws_url,
+                    timeout=aiohttp.ClientTimeout(total=WS_CONNECT_TIMEOUT),
+                    heartbeat=30,
+                )
+
+                _LOGGER.info("Successfully connected to GaggiMate")
+                self._reconnect_attempt = 0
+
+                # Start listener
+                self._listen_task = asyncio.create_task(self._listen())
+
+                # Prime data
+                self.hass.async_create_task(self.request_ota_settings())
+                self.hass.async_create_task(self.request_profiles_list())
+
+            except Exception as err:
+                _LOGGER.error("Failed to connect to GaggiMate: %s", err)
+
+                # DO NOT trigger reconnect from inside locked context
+                # just let caller handle it
+                raise UpdateFailed(f"Failed to connect: {err}") from errr
 
     async def _listen(self) -> None:
-        """Listen for WebSocket messages."""
+        """Listen for messages from the WebSocket."""
         try:
             async for msg in self._ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
@@ -142,22 +182,33 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                     _LOGGER.warning("WebSocket closed")
                     break
         except asyncio.CancelledError:
-            _LOGGER.debug("Listen task cancelled")
             raise
         except Exception as err:
-            _LOGGER.error("Error in WebSocket listen loop: %s", err)
+            _LOGGER.error("WebSocket listen loop error: %s", err)
         finally:
-            await self._schedule_reconnect()
+            if self._ws:
+                with suppress(Exception):
+                    await self._ws.close()
+                self._ws = None
+
+            # optional but strongly recommended
+            for future in self._pending_requests.values():
+                if not future.done():
+                    future.set_exception(UpdateFailed("Connection lost"))
+            self._pending_requests.clear()
+
+            if not self._shutting_down:
+                await self._schedule_reconnect()
 
     async def _handle_message(self, data: str) -> None:
-        """Handle incoming WebSocket message."""
+        """Handle an incoming WebSocket message."""
         try:
             message = json.loads(data)
             msg_type = message.get("tp")
 
             if msg_type == MSG_TYPE_STATUS:
+                self._reconnect_attempt = 0
                 self._last_status_time = datetime.now()
-                # Update coordinator data with status message
                 self.async_set_updated_data(message)
                 return
 
@@ -185,81 +236,89 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                     future.set_result(message)
 
         except json.JSONDecodeError as err:
-            _LOGGER.error("Failed to decode WebSocket message: %s", err)
+            _LOGGER.error("Invalid WebSocket JSON: %s", err)
 
     async def _schedule_reconnect(self) -> None:
-        """Schedule a reconnection attempt."""
+        """Ensure a reconnect loop is running."""
+        if self._shutting_down:
+            return
+
         if self._reconnect_task and not self._reconnect_task.done():
             return
 
-        delay_index = min(self._reconnect_attempt, len(WS_RECONNECT_DELAYS) - 1)
-        delay = WS_RECONNECT_DELAYS[delay_index]
+        self._reconnect_task = asyncio.create_task(self._reconnect_loop())
 
-        _LOGGER.info("Scheduling reconnect in %s seconds (attempt %s)", delay, self._reconnect_attempt + 1)
 
-        self._reconnect_task = asyncio.create_task(self._reconnect_after_delay(delay))
-
-    async def _reconnect_after_delay(self, delay: int) -> None:
-        """Reconnect after delay."""
+    async def _reconnect_loop(self) -> None:
+        """Reconnect loop with incremental backoff."""
         try:
-            await asyncio.sleep(delay)
-            self._reconnect_attempt += 1
-            await self._connect()
+            while not self._shutting_down:
+                delay_index = min(self._reconnect_attempt, len(WS_RECONNECT_DELAYS) - 1)
+                delay = WS_RECONNECT_DELAYS[delay_index]
+
+                _LOGGER.warning(
+                    "Reconnect attempt %s in %s seconds",
+                    self._reconnect_attempt + 1,
+                    delay,
+                )
+
+                await asyncio.sleep(delay)
+
+                try:
+                    await self._connect()
+
+                    # SUCCESS → reset and exit loop
+                    self._reconnect_attempt = 0
+                    _LOGGER.info("Reconnect successful")
+                    return
+
+                except Exception as err:
+                    self._reconnect_attempt += 1
+                    _LOGGER.error("Reconnect failed: %s", err)
+
         except asyncio.CancelledError:
-            _LOGGER.debug("Reconnect task cancelled")
             raise
-        except Exception as err:
-            _LOGGER.error("Error during reconnect: %s", err)
-            # If reconnect failed, this task is finishing; clear it so we can schedule
-            # the next retry attempt.
-            self._reconnect_task = None
-            await self._schedule_reconnect()
         finally:
-            # If this reconnect task is still the active task reference, clear it.
-            if self._reconnect_task is asyncio.current_task():
-                self._reconnect_task = None
+            self._reconnect_task = None
 
     async def _check_availability(self) -> None:
-        """Periodically check if device is available based on last status time."""
-        while True:
+        """Monitor status updates and reconnect if stale."""
+        while not self._shutting_down:
             try:
                 await asyncio.sleep(1)
 
                 if self._last_status_time is None:
                     continue
 
-                time_since_status = (datetime.now() - self._last_status_time).total_seconds()
+                elapsed = (datetime.now() - self._last_status_time).total_seconds()
 
-                if time_since_status > WS_UNAVAILABLE_TIMEOUT:
-                    _LOGGER.warning(
-                        "No status update received for %s seconds, reconnecting WebSocket",
-                        round(time_since_status, 1),
-                    )
-                    self.async_set_updated_data(None)
+                if elapsed > WS_UNAVAILABLE_TIMEOUT:
+                    _LOGGER.warning("No status update for %.1f seconds — closing WebSocket", elapsed)
                     self._last_status_time = None
+
+                    # Closing WS causes listener to trigger reconnect
                     if self._ws and not self._ws.closed:
                         await self._ws.close()
 
             except asyncio.CancelledError:
-                _LOGGER.debug("Availability check task cancelled")
                 raise
             except Exception as err:
-                _LOGGER.error("Error checking availability: %s", err)
+                _LOGGER.error("Availability check error: %s", err)
 
     async def send_message(self, message: dict[str, Any]) -> None:
-        """Send a message to the WebSocket."""
+        """Send message to the device."""
         if self._ws is None or self._ws.closed:
+            await self._schedule_reconnect()
             raise UpdateFailed("WebSocket not connected")
-
         try:
             await self._ws.send_json(message)
             _LOGGER.debug("Sent message: %s", message)
         except Exception as err:
-            _LOGGER.error("Failed to send message: %s", err)
+            await self._schedule_reconnect()
             raise UpdateFailed(f"Failed to send message: {err}") from err
 
     async def _request(self, message: dict[str, Any]) -> dict[str, Any]:
-        """Send a request message and await a response with matching rid."""
+        """Send a request and await the matching response."""
         rid = str(uuid.uuid4())
         message["rid"] = rid
         loop = asyncio.get_running_loop()
@@ -274,17 +333,14 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed("Timed out waiting for response") from err
 
     async def set_mode(self, mode: int) -> None:
-        """Set machine mode."""
         await self.send_message({"tp": MSG_TYPE_MODE_CHANGE, "mode": mode})
 
     async def set_temperature(self, temperature: float) -> None:
-        """Set target temperature."""
         if self.data is None:
-            raise UpdateFailed("No status data available to adjust temperature")
-
+            raise UpdateFailed("No status data available")
         current_target = self.data.get("tt")
         if current_target is None:
-            raise UpdateFailed("Target temperature is unavailable")
+            raise UpdateFailed("Target temperature missing")
 
         delta = int(round(temperature - float(current_target)))
         if delta == 0:
@@ -298,52 +354,40 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             await asyncio.sleep(0.05)
 
     async def start_brew(self) -> None:
-        """Start brewing."""
         await self.send_message({"tp": MSG_TYPE_PROCESS_ACTIVATE})
 
     async def stop_brew(self) -> None:
-        """Stop brewing."""
         await self.send_message({"tp": MSG_TYPE_PROCESS_DEACTIVATE})
 
     async def start_flush(self) -> None:
-        """Start a flush cycle."""
         await self._request({"tp": MSG_TYPE_FLUSH_START})
 
     async def request_profiles_list(self) -> None:
-        """Request profile list from device."""
         try:
             await self._request({"tp": MSG_TYPE_PROFILES_LIST})
-        except UpdateFailed as err:
-            _LOGGER.debug("Failed to request profiles list: %s", err)
+        except UpdateFailed:
+            _LOGGER.debug("Failed to request profile list")
 
     async def select_profile(self, profile_id: str) -> None:
-        """Select a profile by ID."""
         await self._request({"tp": MSG_TYPE_PROFILES_SELECT, "id": profile_id})
 
     async def request_ota_settings(self) -> None:
-        """Request OTA settings info."""
         try:
             await self.send_message({"tp": MSG_TYPE_OTA_SETTINGS})
-        except UpdateFailed as err:
-            _LOGGER.debug("Failed to request OTA settings: %s", err)
+        except UpdateFailed:
+            _LOGGER.debug("Failed to request OTA settings")
 
     async def request_history_list(self) -> list[dict[str, Any]]:
-        """Fetch shot history list from the device."""
         response = await self._request({"tp": MSG_TYPE_HISTORY_LIST})
         history = response.get("history")
-        if history is None:
-            raise UpdateFailed("History list missing in response")
-        if not isinstance(history, list):
-            raise UpdateFailed("Invalid history list format")
+        if history is None or not isinstance(history, list):
+            raise UpdateFailed("Invalid history list response")
         return history
 
     async def delete_history_item(self, shot_id: int | str) -> None:
-        """Delete a shot history item by ID."""
         await self._request({"tp": MSG_TYPE_HISTORY_DELETE, "id": str(shot_id)})
 
     async def get_history_notes(self, shot_id: int | str) -> dict[str, Any]:
-        """Fetch notes for a shot; returns empty dict if none."""
-        # Normalize ID to unpadded format to match how the firmware stores notes files
         response = await self._request({"tp": MSG_TYPE_HISTORY_NOTES_GET, "id": str(int(shot_id))})
         notes = response.get("notes")
         if notes is None:
@@ -354,10 +398,8 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
     @property
     def profiles(self) -> dict[str, str]:
-        """Return profile label->id mapping."""
         return self._profiles
 
     @property
     def ota_settings(self) -> dict[str, Any]:
-        """Return OTA settings payload."""
         return self._ota_settings
