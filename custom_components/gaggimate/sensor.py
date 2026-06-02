@@ -42,7 +42,7 @@ from .const import (
     UNIQUE_ID_TARGET_TEMP,
     UNIQUE_ID_TARGET_VOLUME,
     UNIQUE_ID_UPDATE_CONTROLLER,
-    UNIQUE_ID_UPDATE_DISPLAY,
+    UNIQUE_ID_UPDATE_DISPLAY, UNIQUE_ID_WATER_LEVEL,
 )
 from .coordinator import GaggiMateCoordinator
 
@@ -409,5 +409,14 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         icon="mdi:application-braces",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda _, coordinator: coordinator.ota_settings.get("latestVersion"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_WATER_LEVEL,
+        name="Tank level",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="%",
+        icon="mdi:water",
+        suggested_display_precision=0,
+        value_fn=lambda data, _: _quantize(data.get("wl"), 0),
     ),
 )
