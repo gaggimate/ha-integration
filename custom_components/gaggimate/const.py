@@ -85,6 +85,7 @@ UNIQUE_ID_SHOT_VOLUME_PROGRESS = "shot_volume_progress"
 UNIQUE_ID_STATUS = "status"
 UNIQUE_ID_PROCESS_PHASE = "process_phase"
 UNIQUE_ID_WATER_LEVEL = "water_level"
+UNIQUE_ID_TOF_DISTANCE = "tof_distance"
 
 # Services
 ATTR_MAX_SHOTS = "max_shots"
