@@ -167,7 +167,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
                 # DO NOT trigger reconnect from inside locked context
                 # just let caller handle it
-                raise UpdateFailed(f"Failed to connect: {err}") from errr
+                raise UpdateFailed(f"Failed to connect: {err}") from err
 
     async def _listen(self) -> None:
         """Listen for messages from the WebSocket."""
