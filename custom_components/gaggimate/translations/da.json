@@ -27,12 +27,12 @@
         "max_shots": {
           "name": "Maksimalt antal skud at beholde",
           "description": "Behold dette antal nyeste skud; ældre skud fjernes.",
-          "example": 50
+          "example": "50"
         },
         "keep_annotated": {
           "name": "Bevar annoterede skud",
           "description": "Undtag annoterede skud fra trimning; max_shots gælder kun for ikke-annoterede skud.",
-          "example": false
+          "example": "false"
         }
       }
     }
