@@ -209,7 +209,10 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             if msg_type == MSG_TYPE_STATUS:
                 self._reconnect_attempt = 0
                 self._last_status_time = datetime.now()
-                self.async_set_updated_data(message)
+                # Firmware sends partial status frames: fast telemetry every tick and the
+                # slow-changing state only when it changes (plus a full snapshot on connect).
+                # Merge onto the last known status; a key sent as null clears it.
+                self.async_set_updated_data({**(self.data or {}), **message})
                 return
 
             if msg_type == "res:ota-settings":
