@@ -42,7 +42,7 @@ from .const import (
     UNIQUE_ID_TARGET_TEMP,
     UNIQUE_ID_TARGET_VOLUME,
     UNIQUE_ID_UPDATE_CONTROLLER,
-    UNIQUE_ID_UPDATE_DISPLAY, UNIQUE_ID_WATER_LEVEL,
+    UNIQUE_ID_UPDATE_DISPLAY, UNIQUE_ID_WATER_LEVEL, UNIQUE_ID_TOF_DISTANCE,
 )
 from .coordinator import GaggiMateCoordinator
 
@@ -418,5 +418,15 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         icon="mdi:water",
         suggested_display_precision=0,
         value_fn=lambda data, _: _quantize(data.get("wl"), 0),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_TOF_DISTANCE,
+        name="ToF Distance",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="mm",
+        icon="mdi:arrow-collapse-down",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=0,
+        value_fn=lambda data, _: _quantize(data.get("tof"), 0),
     ),
 )
