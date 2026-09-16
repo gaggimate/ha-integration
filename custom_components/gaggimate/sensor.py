@@ -99,7 +99,10 @@ class GaggiMateEntity(CoordinatorEntity[GaggiMateCoordinator]):
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        return self.coordinator.last_update_success and self.coordinator.data is not None
+        return (
+            self.coordinator.available
+            and self.coordinator.data is not None
+        )
 
 
 class GaggiMateSensor(GaggiMateEntity, SensorEntity):
