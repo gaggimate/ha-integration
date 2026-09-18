@@ -5,7 +5,7 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime
+import time
 from typing import Any
 from contextlib import suppress
 
@@ -56,7 +56,8 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         self._session: aiohttp.ClientSession | None = None
         self._reconnect_task: asyncio.Task | None = None
         self._reconnect_attempt = 0
-        self._last_status_time: datetime | None = None
+        self._last_status_time: float | None = None
+        self._available = False
         self._availability_check_task: asyncio.Task | None = None
         self._listen_task: asyncio.Task | None = None
         self._pending_requests: dict[str, asyncio.Future] = {}
@@ -186,6 +187,9 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.error("WebSocket listen loop error: %s", err)
         finally:
+            if self._available:
+                self._available = False
+                self.async_update_listeners()
             if self._ws:
                 with suppress(Exception):
                     await self._ws.close()
@@ -208,7 +212,12 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
             if msg_type == MSG_TYPE_STATUS:
                 self._reconnect_attempt = 0
-                self._last_status_time = datetime.now()
+                self._last_status_time = time.monotonic()
+                
+                if not self._available:
+                    _LOGGER.info("GaggiMate became available")
+                    self._available = True
+                    self.async_update_listeners()
                 # Firmware sends partial status frames: fast telemetry every tick and the
                 # slow-changing state only when it changes (plus a full snapshot on connect).
                 # Merge onto the last known status; a key sent as null clears it.
@@ -293,12 +302,21 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                 if self._last_status_time is None:
                     continue
 
-                elapsed = (datetime.now() - self._last_status_time).total_seconds()
+                elapsed = time.monotonic() - self._last_status_time
 
                 if elapsed > WS_UNAVAILABLE_TIMEOUT:
-                    _LOGGER.warning("No status update for %.1f seconds — closing WebSocket", elapsed)
+                    _LOGGER.warning(
+                        "No status update for %.1f seconds - marking unavailable",
+                        elapsed,
+                    )
+                
                     self._last_status_time = None
-
+                
+                    if self._available:
+                        self._available = False
+                        self.async_set_updated_data({})
+                        self.async_update_listeners()
+                    
                     # Closing WS causes listener to trigger reconnect
                     if self._ws and not self._ws.closed:
                         await self._ws.close()
@@ -406,3 +424,8 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
     @property
     def ota_settings(self) -> dict[str, Any]:
         return self._ota_settings
+        
+    @property
+    def available(self) -> bool:
+        # Return whether the machine is available.
+        return self._available
