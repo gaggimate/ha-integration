@@ -42,7 +42,15 @@ from .const import (
     UNIQUE_ID_TARGET_TEMP,
     UNIQUE_ID_TARGET_VOLUME,
     UNIQUE_ID_UPDATE_CONTROLLER,
-    UNIQUE_ID_UPDATE_DISPLAY, UNIQUE_ID_WATER_LEVEL, UNIQUE_ID_TOF_DISTANCE,
+    UNIQUE_ID_UPDATE_DISPLAY,
+    UNIQUE_ID_WATER_LEVEL,
+    UNIQUE_ID_TOF_DISTANCE,
+    UNIQUE_ID_WARNING_WATER,
+    UNIQUE_ID_WARNING_TEMPERATURE,
+    UNIQUE_ID_WARNING_SWITCH,
+    UNIQUE_ID_WARNING_FLUSH,
+    UNIQUE_ID_WARNING_SCALE_CONNECTED,
+    UNIQUE_ID_WARNING_SCALE_BATTERY,
 )
 from .coordinator import GaggiMateCoordinator
 
@@ -245,6 +253,68 @@ def _quantize(value: Any, decimals: int) -> float | None:
 _temp_deadband = DeadbandFilter(0.2)
 _pressure_deadband = DeadbandFilter(0.2)
 
+WARNING_SEVERITY = {
+    0: "Ignore",
+    1: "Warning",
+    2: "Error",
+}
+
+
+def _get_warning(data: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return warning information for a given warning key."""
+    warnings = data.get("warn") or []
+
+    for warning in warnings:
+        if warning.get("k") == key:
+            return warning
+
+    return None
+
+
+def _get_warning_state(data: dict[str, Any], key: str) -> str | None:
+    """Return whether a warning is active."""
+    warning = _get_warning(data, key)
+
+    if warning is None:
+        return None
+
+    return "Active" if warning.get("a") else "Inactive"
+
+
+def _get_warning_attrs(
+    data: dict[str, Any],
+    key: str,
+) -> dict[str, Any]:
+    """Return warning severity attributes."""
+    warning = _get_warning(data, key)
+
+    if warning is None:
+        return {}
+
+    severity = warning.get("l")
+
+    return {
+        "severity": WARNING_SEVERITY.get(severity, "Unknown"),
+        "severity_level": severity,
+    }
+
+
+def _get_warning_icon(
+    data: dict[str, Any],
+    key: str,
+    default_icon: str,
+) -> str:
+    """Return an icon based on warning state."""
+    warning = _get_warning(data, key)
+
+    if warning is None or not warning.get("a"):
+        return default_icon
+
+    if warning.get("l") == 2:
+        return "mdi:alert-circle"
+
+    return "mdi:alert"
+
 SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_CURRENT_TEMP,
@@ -428,5 +498,81 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         suggested_display_precision=0,
         value_fn=lambda data, _: _quantize(data.get("tof"), 0),
+    ),
+        GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_WARNING_WATER,
+        name="Water Tank Low",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:water",
+        value_fn=lambda data, _: _get_warning_state(data, "water"),
+        icon_fn=lambda data, _: _get_warning_icon(
+            data, "water", "mdi:water"
+        ),
+        extra_attrs_fn=lambda data, _: _get_warning_attrs(data, "water"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_WARNING_TEMPERATURE,
+        name="Temperature Not Stable",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:thermometer",
+        value_fn=lambda data, _: _get_warning_state(data, "temperature"),
+        icon_fn=lambda data, _: _get_warning_icon(
+            data, "temperature", "mdi:thermometer"
+        ),
+        extra_attrs_fn=lambda data, _: _get_warning_attrs(
+            data, "temperature"
+        ),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_WARNING_SWITCH,
+        name="Steam Switch Left On",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:toggle-switch",
+        value_fn=lambda data, _: _get_warning_state(data, "switch"),
+        icon_fn=lambda data, _: _get_warning_icon(
+            data, "switch", "mdi:toggle-switch"
+        ),
+        extra_attrs_fn=lambda data, _: _get_warning_attrs(data, "switch"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_WARNING_FLUSH,
+        name="Flush Recommended",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:water-sync",
+        value_fn=lambda data, _: _get_warning_state(data, "flush"),
+        icon_fn=lambda data, _: _get_warning_icon(
+            data, "flush", "mdi:water-sync"
+        ),
+        extra_attrs_fn=lambda data, _: _get_warning_attrs(data, "flush"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_WARNING_SCALE_CONNECTED,
+        name="Scale Not Connected",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:scale-off",
+        value_fn=lambda data, _: _get_warning_state(
+            data, "scaleConnected"
+        ),
+        icon_fn=lambda data, _: _get_warning_icon(
+            data, "scaleConnected", "mdi:scale-off"
+        ),
+        extra_attrs_fn=lambda data, _: _get_warning_attrs(
+            data, "scaleConnected"
+        ),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_WARNING_SCALE_BATTERY,
+        name="Scale Battery Low",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:battery",
+        value_fn=lambda data, _: _get_warning_state(
+            data, "scaleBattery"
+        ),
+        icon_fn=lambda data, _: _get_warning_icon(
+            data, "scaleBattery", "mdi:battery"
+        ),
+        extra_attrs_fn=lambda data, _: _get_warning_attrs(
+            data, "scaleBattery"
+        ),
     ),
 )
