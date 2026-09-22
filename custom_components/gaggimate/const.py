@@ -86,6 +86,12 @@ UNIQUE_ID_STATUS = "status"
 UNIQUE_ID_PROCESS_PHASE = "process_phase"
 UNIQUE_ID_WATER_LEVEL = "water_level"
 UNIQUE_ID_TOF_DISTANCE = "tof_distance"
+UNIQUE_ID_WARNING_WATER = "warning_water"
+UNIQUE_ID_WARNING_TEMPERATURE = "warning_temperature"
+UNIQUE_ID_WARNING_SWITCH = "warning_switch"
+UNIQUE_ID_WARNING_FLUSH = "warning_flush"
+UNIQUE_ID_WARNING_SCALE_CONNECTED = "warning_scale_connected"
+UNIQUE_ID_WARNING_SCALE_BATTERY = "warning_scale_battery"
 
 # Services
 ATTR_MAX_SHOTS = "max_shots"
