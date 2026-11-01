@@ -13,7 +13,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfMass, UnitOfPressure, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, UnitOfMass, UnitOfPressure, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import Entity, EntityCategory
@@ -28,6 +28,7 @@ from .const import (
     UNIQUE_ID_CURRENT_PRESSURE,
     UNIQUE_ID_CURRENT_TEMP,
     UNIQUE_ID_CURRENT_WEIGHT,
+    UNIQUE_ID_HEATER_POWER,
     UNIQUE_ID_HW_MODEL,
     UNIQUE_ID_LATEST_VERSION,
     UNIQUE_ID_MODE,
@@ -467,6 +468,16 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         icon="mdi:water-pump",
         suggested_display_precision=1,
         value_fn=lambda data, _: _quantize(data.get("fl"), 1),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_HEATER_POWER,
+        name="Heater Power",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:heating-coil",
+        suggested_display_precision=0,
+        # Heater duty cycle in percent (0-100) as reported by the controller
+        value_fn=lambda data, _: _quantize(data.get("hp"), 1),
     ),
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_TARGET_VOLUME,
