@@ -41,8 +41,8 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Current Pressure | Live pressure reading from the machine | Pressure |
 | Target Pressure | Desired pressure target | Pressure |
 | Pump Flow | Current pump flow rate | - |
-| Heater Power | Current heater output (duty cycle, %) | - |
-| Pump Power | Current pump output (%) | - |
+| Heater Power | Current heater output (duty cycle, %) (diagnostic) | - |
+| Pump Power | Current pump output (%) (diagnostic) | - |
 | Mode | Active machine mode (Standby, Brew, Steam, Hot Water, Grind) | - |
 | Status | Derived machine status (Idle, Brewing, Steaming, Grinding, Pouring Water) | - |
 | Process Phase | Current process phase label from the machine (e.g. infusion, brew, finished) | - |
@@ -50,7 +50,7 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Target Shot Weight | Target shot volume for the selected profile | Weight |
 | Shot Weight Progress | Current shot volume progress during extraction | Weight |
 | Scale Connection | BLE scale connection state (Connected/Disconnected) | - |
-| Scale Battery | BLE scale battery level (unknown when no scale is connected) | Battery |
+| Scale Battery | BLE scale battery level (unknown when no scale is connected) (diagnostic) | Battery |
 | Current Weight | Live weight reading from scale | Weight |
 | Hardware Model | Controller hardware model information (diagnostic) | - |
 | Display Firmware Version | Current display firmware version (diagnostic) | - |
