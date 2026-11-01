@@ -34,6 +34,7 @@ from .const import (
     UNIQUE_ID_MODE,
     UNIQUE_ID_PUMP_FLOW,
     UNIQUE_ID_PUMP_POWER,
+    UNIQUE_ID_SCALE_BATTERY,
     UNIQUE_ID_SCALE_CONNECTED,
     UNIQUE_ID_SELECTED_PROFILE,
     UNIQUE_ID_SHOT_VOLUME_PROGRESS,
@@ -426,6 +427,15 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         value_fn=lambda data, _: None
         if data.get("bc") is None
         else ("Connected" if data.get("bc") else "Disconnected"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_SCALE_BATTERY,
+        name="Scale Battery",
+        device_class=SensorDeviceClass.BATTERY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        # Firmware sends null when no scale is connected or the level is unknown
+        value_fn=lambda data, _: _quantize(data.get("sbat"), 0),
     ),
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_CURRENT_WEIGHT,

@@ -50,6 +50,7 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Target Shot Weight | Target shot volume for the selected profile | Weight |
 | Shot Weight Progress | Current shot volume progress during extraction | Weight |
 | Scale Connection | BLE scale connection state (Connected/Disconnected) | - |
+| Scale Battery | BLE scale battery level (unknown when no scale is connected) | Battery |
 | Current Weight | Live weight reading from scale | Weight |
 | Hardware Model | Controller hardware model information (diagnostic) | - |
 | Display Firmware Version | Current display firmware version (diagnostic) | - |
