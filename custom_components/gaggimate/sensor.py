@@ -33,6 +33,7 @@ from .const import (
     UNIQUE_ID_LATEST_VERSION,
     UNIQUE_ID_MODE,
     UNIQUE_ID_PUMP_FLOW,
+    UNIQUE_ID_PUMP_POWER,
     UNIQUE_ID_SCALE_CONNECTED,
     UNIQUE_ID_SELECTED_PROFILE,
     UNIQUE_ID_SHOT_VOLUME_PROGRESS,
@@ -478,6 +479,16 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         suggested_display_precision=0,
         # Heater duty cycle in percent (0-100) as reported by the controller
         value_fn=lambda data, _: _quantize(data.get("hp"), 1),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_PUMP_POWER,
+        name="Pump Power",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:pump",
+        suggested_display_precision=0,
+        # Pump output in percent (0-100) as reported by the controller
+        value_fn=lambda data, _: _quantize(data.get("pw"), 1),
     ),
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_TARGET_VOLUME,

@@ -42,6 +42,7 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Target Pressure | Desired pressure target | Pressure |
 | Pump Flow | Current pump flow rate | - |
 | Heater Power | Current heater output (duty cycle, %) | - |
+| Pump Power | Current pump output (%) | - |
 | Mode | Active machine mode (Standby, Brew, Steam, Hot Water, Grind) | - |
 | Status | Derived machine status (Idle, Brewing, Steaming, Grinding, Pouring Water) | - |
 | Process Phase | Current process phase label from the machine (e.g. infusion, brew, finished) | - |
