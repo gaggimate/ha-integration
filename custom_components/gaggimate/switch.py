@@ -104,7 +104,7 @@ class GaggiMateSteamBoilerSwitch(GaggiMateEntity, SwitchEntity):
         """Return true if the steam boiler is heating."""
         if self.coordinator.data is None:
             return None
-        value = self.coordinator.data.get("steamActive")
+        value = self.coordinator.data.get("sa")
         if value is None:
             return None
         return bool(value)

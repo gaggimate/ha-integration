@@ -108,7 +108,7 @@ def async_setup_steam_entities(
     """Add steam boiler entities only on boards that support them.
 
     Support is only known once the first status frame has arrived, so this
-    waits for data. Boards that report steamControlsAvailable get the
+    waits for data. Boards that report sca (steam controls available) get the
     entities; on other boards any entities left over from an earlier run are
     removed from the registry so they don't linger as "unavailable".
     """
@@ -119,7 +119,7 @@ def async_setup_steam_entities(
         data = coordinator.data
         if not data or state["added"]:
             return
-        if data.get("steamControlsAvailable"):
+        if data.get("sca"):
             state["added"] = True
             async_add_entities(entities)
             return

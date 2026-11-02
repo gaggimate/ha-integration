@@ -378,7 +378,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
     @property
     def steam_controls_available(self) -> bool:
         """Return True if the board reports a controllable steam boiler (dual boiler)."""
-        return bool((self.data or {}).get("steamControlsAvailable"))
+        return bool((self.data or {}).get("sca"))
 
     async def set_steam_boiler(self, on: bool) -> None:
         """Switch the steam boiler on or off.
@@ -386,7 +386,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         The firmware only offers a toggle, so send it only when the
         reported state differs from the requested one.
         """
-        current = (self.data or {}).get("steamActive")
+        current = (self.data or {}).get("sa")
         if current is not None and bool(current) == on:
             return
         await self.send_message({"tp": MSG_TYPE_STEAM_TOGGLE})
