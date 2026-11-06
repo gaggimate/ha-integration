@@ -9,9 +9,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, MachineMode, UNIQUE_ID_POWER
+from .const import DOMAIN, MachineMode, UNIQUE_ID_POWER, UNIQUE_ID_STEAM_BOILER
 from .coordinator import GaggiMateCoordinator
-from .sensor import GaggiMateEntity
+from .sensor import GaggiMateEntity, async_setup_steam_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +29,15 @@ async def async_setup_entry(
     ]
 
     async_add_entities(entities)
+
+    async_setup_steam_entities(
+        hass,
+        entry,
+        coordinator,
+        async_add_entities,
+        "switch",
+        [GaggiMateSteamBoilerSwitch(coordinator, entry)],
+    )
 
 
 class GaggiMatePowerSwitch(GaggiMateEntity, SwitchEntity):
@@ -72,3 +81,38 @@ class GaggiMatePowerSwitch(GaggiMateEntity, SwitchEntity):
         except Exception as err:
             _LOGGER.error("Failed to turn off GaggiMate: %s", err)
             raise
+
+
+class GaggiMateSteamBoilerSwitch(GaggiMateEntity, SwitchEntity):
+    """Steam boiler heater switch (dual-boiler machines only)."""
+
+    _attr_icon = "mdi:kettle-steam"
+
+    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the switch."""
+        super().__init__(coordinator, entry)
+        self._attr_name = "Steam Boiler"
+        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_STEAM_BOILER}"
+
+    @property
+    def available(self) -> bool:
+        """Only available when the board reports steam controls."""
+        return super().available and self.coordinator.steam_controls_available
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if the steam boiler is heating."""
+        if self.coordinator.data is None:
+            return None
+        value = self.coordinator.data.get("sa")
+        if value is None:
+            return None
+        return bool(value)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the steam boiler on."""
+        await self.coordinator.set_steam_boiler(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn the steam boiler off."""
+        await self.coordinator.set_steam_boiler(False)

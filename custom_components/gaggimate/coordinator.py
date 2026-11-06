@@ -23,6 +23,7 @@ from .const import (
     MSG_TYPE_PROFILES_LIST,
     MSG_TYPE_PROFILES_SELECT,
     MSG_TYPE_STATUS,
+    MSG_TYPE_STEAM_TOGGLE,
     MSG_TYPE_TEMP_LOWER,
     MSG_TYPE_TEMP_RAISE,
     MachineMode,
@@ -373,6 +374,22 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         for _ in range(steps):
             await self.send_message({"tp": msg_type})
             await asyncio.sleep(0.05)
+
+    @property
+    def steam_controls_available(self) -> bool:
+        """Return True if the board reports a controllable steam boiler (dual boiler)."""
+        return bool((self.data or {}).get("sca"))
+
+    async def set_steam_boiler(self, on: bool) -> None:
+        """Switch the steam boiler on or off.
+
+        The firmware only offers a toggle, so send it only when the
+        reported state differs from the requested one.
+        """
+        current = (self.data or {}).get("sa")
+        if current is not None and bool(current) == on:
+            return
+        await self.send_message({"tp": MSG_TYPE_STEAM_TOGGLE})
 
     async def start_brew(self) -> None:
         await self.send_message({"tp": MSG_TYPE_PROCESS_ACTIVATE})

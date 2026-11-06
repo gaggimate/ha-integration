@@ -13,9 +13,10 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfMass, UnitOfPressure, UnitOfTemperature
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.const import PERCENTAGE, UnitOfMass, UnitOfPressure, UnitOfTemperature
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity import Entity, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -27,15 +28,21 @@ from .const import (
     UNIQUE_ID_CURRENT_PRESSURE,
     UNIQUE_ID_CURRENT_TEMP,
     UNIQUE_ID_CURRENT_WEIGHT,
+    UNIQUE_ID_HEATER_POWER,
     UNIQUE_ID_HW_MODEL,
     UNIQUE_ID_LATEST_VERSION,
     UNIQUE_ID_MODE,
     UNIQUE_ID_PUMP_FLOW,
+    UNIQUE_ID_PUMP_POWER,
+    UNIQUE_ID_SCALE_BATTERY,
     UNIQUE_ID_SCALE_CONNECTED,
     UNIQUE_ID_SELECTED_PROFILE,
     UNIQUE_ID_SHOT_VOLUME_PROGRESS,
     UNIQUE_ID_PROCESS_PHASE,
     UNIQUE_ID_STATUS,
+    UNIQUE_ID_STEAM_TEMP,
+    UNIQUE_ID_STEAM_TARGET_TEMP,
+    UNIQUE_ID_STEAM_BOILER_LEVEL,
     UNIQUE_ID_SW_CONTROLLER,
     UNIQUE_ID_SW_DISPLAY,
     UNIQUE_ID_TARGET_PRESSURE,
@@ -80,6 +87,53 @@ async def async_setup_entry(
     async_add_entities(
         GaggiMateSensor(coordinator, entry, description) for description in SENSORS
     )
+
+    async_setup_steam_entities(
+        hass,
+        entry,
+        coordinator,
+        async_add_entities,
+        "sensor",
+        [GaggiMateSensor(coordinator, entry, description) for description in STEAM_SENSORS],
+    )
+
+
+def async_setup_steam_entities(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: GaggiMateCoordinator,
+    async_add_entities: AddEntitiesCallback,
+    platform: str,
+    entities: list[Entity],
+) -> None:
+    """Add steam boiler entities only on boards that support them.
+
+    Support is only known once the first status frame has arrived, so this
+    waits for data. Boards that report sca (steam controls available) get the
+    entities; on other boards any entities left over from an earlier run are
+    removed from the registry so they don't linger as "unavailable".
+    """
+    state = {"added": False, "cleaned": False}
+
+    @callback
+    def _check() -> None:
+        data = coordinator.data
+        if not data or state["added"]:
+            return
+        if data.get("sca"):
+            state["added"] = True
+            async_add_entities(entities)
+            return
+        if not state["cleaned"]:
+            state["cleaned"] = True
+            registry = er.async_get(hass)
+            for entity in entities:
+                entity_id = registry.async_get_entity_id(platform, DOMAIN, entity.unique_id)
+                if entity_id:
+                    registry.async_remove(entity_id)
+
+    entry.async_on_unload(coordinator.async_add_listener(_check))
+    _check()
 
 
 class GaggiMateEntity(CoordinatorEntity[GaggiMateCoordinator]):
@@ -376,6 +430,16 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         else ("Connected" if data.get("bc") else "Disconnected"),
     ),
     GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_SCALE_BATTERY,
+        name="Scale Battery",
+        device_class=SensorDeviceClass.BATTERY,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        native_unit_of_measurement=PERCENTAGE,
+        # Firmware sends null when no scale is connected or the level is unknown
+        value_fn=lambda data, _: _quantize(data.get("sbat"), 0),
+    ),
+    GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_CURRENT_WEIGHT,
         name="Current Weight",
         device_class=SensorDeviceClass.WEIGHT,
@@ -417,6 +481,28 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         icon="mdi:water-pump",
         suggested_display_precision=1,
         value_fn=lambda data, _: _quantize(data.get("fl"), 1),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_HEATER_POWER,
+        name="Heater Power",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:heating-coil",
+        suggested_display_precision=0,
+        # Heater duty cycle in percent (0-100) as reported by the controller
+        value_fn=lambda data, _: _quantize(data.get("hp"), 1),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_PUMP_POWER,
+        name="Pump Power",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:pump",
+        suggested_display_precision=0,
+        # Pump output in percent (0-100) as reported by the controller
+        value_fn=lambda data, _: _quantize(data.get("pw"), 1),
     ),
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_TARGET_VOLUME,
@@ -577,5 +663,45 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         extra_attrs_fn=lambda data, _: _get_warning_attrs(
             data, "scaleBattery"
         ),
+    ),
+)
+
+
+# Created only on dual-boiler boards, see async_setup_steam_entities
+STEAM_SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_STEAM_TEMP,
+        name="Steam Temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon="mdi:thermometer",
+        suggested_display_precision=1,
+        value_fn=lambda data, _: _quantize(data.get("cst"), 1),
+        # Only dual-boiler boards report a separate steam boiler
+        available_fn=lambda _, coordinator: coordinator.steam_controls_available,
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_STEAM_TARGET_TEMP,
+        name="Target Steam Temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon="mdi:thermometer-auto",
+        suggested_display_precision=1,
+        value_fn=lambda data, _: _quantize(data.get("tst"), 1),
+        available_fn=lambda _, coordinator: coordinator.steam_controls_available,
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_STEAM_BOILER_LEVEL,
+        name="Steam Boiler Level",
+        icon="mdi:water-boiler",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        # sbl: steam boiler water low; only meaningful when a level sensor is fitted (hsl)
+        value_fn=lambda data, _: None
+        if data.get("sbl") is None
+        else ("Low" if data.get("sbl") else "OK"),
+        available_fn=lambda data, coordinator: coordinator.steam_controls_available
+        and bool(data.get("hsl")),
     ),
 )

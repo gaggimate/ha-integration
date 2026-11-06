@@ -36,9 +36,14 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 |--------|-------------|--------------|
 | Current Temperature | Live temperature reading from the machine | Temperature |
 | Target Temperature | Desired temperature target | Temperature |
+| Steam Temperature | Live steam boiler temperature (dual-boiler boards only) | Temperature |
+| Target Steam Temperature | Steam boiler temperature target (dual-boiler boards only) | Temperature |
+| Steam Boiler Level | Steam boiler water level, Low/OK (dual-boiler boards with a level sensor, diagnostic) | - |
 | Current Pressure | Live pressure reading from the machine | Pressure |
 | Target Pressure | Desired pressure target | Pressure |
 | Pump Flow | Current pump flow rate | - |
+| Heater Power | Current heater output (duty cycle, %) (diagnostic) | - |
+| Pump Power | Current pump output (%) (diagnostic) | - |
 | Mode | Active machine mode (Standby, Brew, Steam, Hot Water, Grind) | - |
 | Status | Derived machine status (Idle, Brewing, Steaming, Grinding, Pouring Water) | - |
 | Process Phase | Current process phase label from the machine (e.g. infusion, brew, finished) | - |
@@ -46,6 +51,7 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Target Shot Weight | Target shot volume for the selected profile | Weight |
 | Shot Weight Progress | Current shot volume progress during extraction | Weight |
 | Scale Connection | BLE scale connection state (Connected/Disconnected) | - |
+| Scale Battery | BLE scale battery level (unknown when no scale is connected) (diagnostic) | Battery |
 | Current Weight | Live weight reading from scale | Weight |
 | Hardware Model | Controller hardware model information (diagnostic) | - |
 | Display Firmware Version | Current display firmware version (diagnostic) | - |
@@ -58,6 +64,7 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Entity | Type | Description |
 |--------|------|-------------|
 | Machine Active | Switch | Turn the machine on/off |
+| Steam Boiler | Switch | Turn the steam boiler heater on/off (dual-boiler boards only) |
 | Mode | Select | Choose machine operating mode |
 | Profile | Select | Choose brewing profile |
 | Target Temperature Setpoint | Number | Set desired temperature (0–160 °C) |
