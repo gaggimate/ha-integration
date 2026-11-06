@@ -38,6 +38,7 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Target Temperature | Desired temperature target | Temperature |
 | Steam Temperature | Live steam boiler temperature (dual-boiler boards only) | Temperature |
 | Target Steam Temperature | Steam boiler temperature target (dual-boiler boards only) | Temperature |
+| Steam Boiler Level | Steam boiler water level, Low/OK (dual-boiler boards with a level sensor, diagnostic) | - |
 | Current Pressure | Live pressure reading from the machine | Pressure |
 | Target Pressure | Desired pressure target | Pressure |
 | Pump Flow | Current pump flow rate | - |

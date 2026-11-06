@@ -42,6 +42,7 @@ from .const import (
     UNIQUE_ID_STATUS,
     UNIQUE_ID_STEAM_TEMP,
     UNIQUE_ID_STEAM_TARGET_TEMP,
+    UNIQUE_ID_STEAM_BOILER_LEVEL,
     UNIQUE_ID_SW_CONTROLLER,
     UNIQUE_ID_SW_DISPLAY,
     UNIQUE_ID_TARGET_PRESSURE,
@@ -690,5 +691,17 @@ STEAM_SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         suggested_display_precision=1,
         value_fn=lambda data, _: _quantize(data.get("tst"), 1),
         available_fn=lambda _, coordinator: coordinator.steam_controls_available,
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_STEAM_BOILER_LEVEL,
+        name="Steam Boiler Level",
+        icon="mdi:water-boiler",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        # sbl: steam boiler water low; only meaningful when a level sensor is fitted (hsl)
+        value_fn=lambda data, _: None
+        if data.get("sbl") is None
+        else ("Low" if data.get("sbl") else "OK"),
+        available_fn=lambda data, coordinator: coordinator.steam_controls_available
+        and bool(data.get("hsl")),
     ),
 )
