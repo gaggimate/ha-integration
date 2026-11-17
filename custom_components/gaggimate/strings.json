@@ -33,6 +33,17 @@
       },
       "mode": {
         "name": "Mode"
+      },
+      "firmware_update_phase": {
+        "name": "Firmware Update Phase",
+        "state": {
+          "idle": "Idle",
+          "updating_controller": "Updating controller",
+          "updating_display": "Updating display",
+          "finished": "Finished",
+          "rebooting": "Rebooting",
+          "failed": "Failed"
+        }
       }
     },
     "switch": {

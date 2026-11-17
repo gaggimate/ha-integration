@@ -14,6 +14,12 @@ WS_CONNECT_TIMEOUT = 10  # seconds
 WS_RECONNECT_DELAYS = [1, 2, 4, 8, 16, 30]  # seconds
 WS_REQUEST_TIMEOUT = 30  # seconds
 WS_UNAVAILABLE_TIMEOUT = 15  # seconds - mark unavailable if no status for 15 seconds
+# While the firmware flashes it is busy and sends no status frames (only
+# progress events), so the watchdog must be far more patient then.
+OTA_STATUS_TIMEOUT = 90
+# Right after "finished" the machine restarts: a 15-20 s silence is normal, so allow a
+# little more patience than usual (but far less than the flash itself) to catch a real fault quickly.
+OTA_FINISHED_STATUS_TIMEOUT = 60
 
 # Message types
 MSG_TYPE_STATUS = "evt:status"
@@ -27,9 +33,41 @@ MSG_TYPE_FLUSH_START = "req:flush:start"
 MSG_TYPE_PROFILES_LIST = "req:profiles:list"
 MSG_TYPE_PROFILES_SELECT = "req:profiles:select"
 MSG_TYPE_OTA_SETTINGS = "req:ota-settings"
+MSG_TYPE_OTA_PROGRESS = "evt:ota-progress"
 MSG_TYPE_HISTORY_LIST = "req:history:list"
 MSG_TYPE_HISTORY_DELETE = "req:history:delete"
 MSG_TYPE_HISTORY_NOTES_GET = "req:history:notes:get"
+
+# Firmware (OTA) update progress, as reported by the firmware in evt:ota-progress
+OTA_PHASE_IDLE = 0
+OTA_PHASE_DISPLAY_FW = 1
+OTA_PHASE_DISPLAY_FS = 2
+OTA_PHASE_CONTROLLER_FW = 3
+OTA_PHASE_FINISHED = 4
+OTA_PHASE_FAILED = 5
+
+# Firmware update states exposed by the "Firmware Update Phase" sensor
+OTA_STATE_IDLE = "idle"
+OTA_STATE_UPDATING_CONTROLLER = "updating_controller"
+OTA_STATE_UPDATING_DISPLAY = "updating_display"
+OTA_STATE_FINISHED = "finished"
+OTA_STATE_REBOOTING = "rebooting"
+OTA_STATE_FAILED = "failed"
+OTA_STATES = [
+    OTA_STATE_IDLE,
+    OTA_STATE_UPDATING_CONTROLLER,
+    OTA_STATE_UPDATING_DISPLAY,
+    OTA_STATE_FINISHED,
+    OTA_STATE_REBOOTING,
+    OTA_STATE_FAILED,
+]
+
+# After an update the machine restarts: keep showing "rebooting" for this long
+# (seconds) before falling back to unavailable.
+OTA_REBOOT_GRACE = 300
+# If the machine is still connected this long (seconds) after "finished" no
+# restart happened (nothing needed flashing): go back to idle.
+OTA_FINISHED_IDLE_DELAY = 60
 
 # Machine modes
 class MachineMode(IntEnum):
@@ -75,6 +113,9 @@ UNIQUE_ID_SW_CONTROLLER = "software_controller_version"
 UNIQUE_ID_UPDATE_DISPLAY = "display_software_update"
 UNIQUE_ID_UPDATE_CONTROLLER = "controller_software_update"
 UNIQUE_ID_LATEST_VERSION = "latest_software_version"
+UNIQUE_ID_UPDATE_PHASE = "firmware_update_phase"
+UNIQUE_ID_FW_UPDATE_DISPLAY = "display_firmware_update"
+UNIQUE_ID_FW_UPDATE_CONTROLLER = "controller_firmware_update"
 UNIQUE_ID_SCALE_CONNECTED = "scale_connection_status"
 UNIQUE_ID_CURRENT_WEIGHT = "current_weight"
 UNIQUE_ID_CURRENT_PRESSURE = "current_pressure"
