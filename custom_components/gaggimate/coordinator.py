@@ -21,6 +21,8 @@ from .const import (
     MSG_TYPE_OTA_PROGRESS,
     OTA_STATUS_TIMEOUT,
     OTA_FINISHED_STATUS_TIMEOUT,
+    OTA_CHECK_TIMEOUT,
+    MSG_TYPE_OTA_START,
     MSG_TYPE_OTA_SETTINGS,
     MSG_TYPE_PROCESS_ACTIVATE,
     MSG_TYPE_PROCESS_DEACTIVATE,
@@ -88,6 +90,11 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         self._ota_progress: int | None = None
         self._ota_timer: CALLBACK_TYPE | None = None
         self._profiles_refresh_pending = False
+        # Ask the firmware for one update check after a flash: set when the machine restarts after a
+        # flash, used by the first firmware answer after it is back (see _maybe_check_after_flash).
+        self._check_after_flash = False
+        self._check_deadline: float | None = None
+        self._flash_started_here = False   # the running flash was started by Install in Home Assistant
 
         # NEW: Protect connection logic and shutdown state
         self._connect_lock = asyncio.Lock()
@@ -257,6 +264,8 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                     if self._ota_state == OTA_STATE_REBOOTING:
                         # Back after the restart that followed a firmware update.
                         self._set_ota_state(OTA_STATE_IDLE, None, None)
+                        if self._check_after_flash:
+                            self._check_deadline = time.monotonic() + OTA_CHECK_TIMEOUT
                     self.async_update_listeners()
                 # Firmware sends partial status frames: fast telemetry every tick and the
                 # slow-changing state only when it changes (plus a full snapshot on connect).
@@ -271,6 +280,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             if msg_type == "res:ota-settings":
                 self._ota_settings = self._merge_ota_settings(message)
                 self.async_update_listeners()
+                await self._maybe_check_after_flash(message)
                 return
 
             if msg_type == "res:profiles:list":
@@ -399,6 +409,33 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                 merged[key] = old[key]
         return merged
 
+    async def _maybe_check_after_flash(self, answer: dict[str, Any]) -> None:
+        """Ask the firmware for ONE update check after a flash that Install started, once the machine is back.
+
+        Each flash restarts the machine and the firmware then knows nothing about updates for about
+        30 minutes. The integration changed the firmware's state, so it brings it up to date: only
+        after a completed flash that Install started (never after a flash started elsewhere, a plain
+        reboot or a reconnect), once, on the first answer after the restart, with the channel the
+        machine reports (nothing is sent if it reports none). No retry, no rate limit.
+        """
+        if not self._check_after_flash:
+            return
+        if self._check_deadline is not None and time.monotonic() > self._check_deadline:
+            self._check_after_flash = False   # the answer came too late to be "right after the restart"
+            self._check_deadline = None
+            return
+        self._check_after_flash = False
+        self._check_deadline = None
+        if answer.get("latestVersion"):
+            return                            # the firmware already knows
+        channel = answer.get("channel")
+        if not channel:
+            return
+        try:
+            await self.send_message({"tp": MSG_TYPE_OTA_SETTINGS, "update": True, "channel": channel})
+        except UpdateFailed:
+            _LOGGER.debug("Failed to request the update check after the flash")
+
     def _cancel_ota_timer(self) -> None:
         if self._ota_timer is not None:
             self._ota_timer()
@@ -418,7 +455,13 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             self._profiles_refresh_pending = False
             self.hass.async_create_task(self.request_profiles_list())
 
+        if state in (OTA_STATE_IDLE, OTA_STATE_FAILED):
+            self._flash_started_here = False
+
         if state == OTA_STATE_REBOOTING:
+            # Only a flash started by this integration gets the update check afterwards.
+            self._check_after_flash = self._flash_started_here
+            self._check_deadline = None
             self._ota_timer = async_call_later(
                 self.hass, OTA_REBOOT_GRACE, self._ota_timer_fired
             )
@@ -433,6 +476,9 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
     def _ota_timer_fired(self, _now: Any) -> None:
         """Give up waiting for a restart (rebooting) or the end of a no-op update (finished)."""
         self._ota_timer = None
+        if self._ota_state == OTA_STATE_REBOOTING:
+            self._check_after_flash = False   # the machine never came back: no check
+            self._check_deadline = None
         if self._ota_state in (OTA_STATE_REBOOTING, OTA_STATE_FINISHED):
             self._set_ota_state(OTA_STATE_IDLE, None, None)
 
@@ -553,6 +599,16 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             await self.send_message({"tp": MSG_TYPE_OTA_SETTINGS})
         except UpdateFailed:
             _LOGGER.debug("Failed to request OTA settings")
+
+    async def start_ota(self, component: str) -> None:
+        """Ask the firmware to flash one component ("display" or "controller").
+
+        The firmware sends no reply; progress arrives as evt:ota-progress.
+        """
+        if component not in ("display", "controller"):
+            raise ValueError(f"Unknown firmware component: {component}")
+        await self.send_message({"tp": MSG_TYPE_OTA_START, "cp": component})
+        self._flash_started_here = True
 
     async def request_history_list(self) -> list[dict[str, Any]]:
         response = await self._request({"tp": MSG_TYPE_HISTORY_LIST})

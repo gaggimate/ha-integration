@@ -20,6 +20,9 @@ OTA_STATUS_TIMEOUT = 90
 # Right after "finished" the machine restarts: a 15-20 s silence is normal, so allow a
 # little more patience than usual (but far less than the flash itself) to catch a real fault quickly.
 OTA_FINISHED_STATUS_TIMEOUT = 60
+# After a flash the machine returns and answers with blank update info; we ask the firmware to check once,
+# but only if its first answer arrives within this many seconds of the machine coming back.
+OTA_CHECK_TIMEOUT = 30
 
 # Message types
 MSG_TYPE_STATUS = "evt:status"
@@ -33,6 +36,7 @@ MSG_TYPE_FLUSH_START = "req:flush:start"
 MSG_TYPE_PROFILES_LIST = "req:profiles:list"
 MSG_TYPE_PROFILES_SELECT = "req:profiles:select"
 MSG_TYPE_OTA_SETTINGS = "req:ota-settings"
+MSG_TYPE_OTA_START = "req:ota-start"
 MSG_TYPE_OTA_PROGRESS = "evt:ota-progress"
 MSG_TYPE_HISTORY_LIST = "req:history:list"
 MSG_TYPE_HISTORY_DELETE = "req:history:delete"

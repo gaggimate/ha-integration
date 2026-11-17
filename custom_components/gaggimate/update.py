@@ -10,6 +10,7 @@ from homeassistant.components.update import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -20,7 +21,7 @@ from .const import (
     UNIQUE_ID_FW_UPDATE_DISPLAY,
 )
 from .coordinator import GaggiMateCoordinator
-from .sensor import GaggiMateEntity
+from .sensor import GaggiMateEntity, _get_status
 
 PARALLEL_UPDATES = 1
 
@@ -62,11 +63,15 @@ class GaggiMateFirmwareUpdate(GaggiMateEntity, UpdateEntity):
     """Firmware version and update progress of one GaggiMate component.
 
     Reports the installed and the latest version and, while the machine
-    flashes the component, the progress.
+    flashes the component, the progress. Install asks the firmware to flash
+    the component (the same as "Update Display"/"Update Controller" in the
+    web UI); the machine restarts afterwards.
     """
 
     _attr_device_class = UpdateDeviceClass.FIRMWARE
-    _attr_supported_features = UpdateEntityFeature.PROGRESS
+    _attr_supported_features = (
+        UpdateEntityFeature.PROGRESS | UpdateEntityFeature.INSTALL
+    )
 
     def __init__(
         self,
@@ -142,3 +147,23 @@ class GaggiMateFirmwareUpdate(GaggiMateEntity, UpdateEntity):
         if self.coordinator.ota_state == self._flashing_state:
             return self.coordinator.ota_progress
         return None
+
+    async def async_install(
+        self, version: str | None, backup: bool, **kwargs: Any
+    ) -> None:
+        """Start flashing this component. Refuse while the machine is busy."""
+        if self.coordinator.ota_busy:
+            raise HomeAssistantError("A firmware update is already in progress")
+        if not self.coordinator.available:
+            raise HomeAssistantError("The GaggiMate is not connected")
+        status = _get_status(self.coordinator.data or {})
+        if status != "Idle":
+            raise HomeAssistantError(
+                f"Not updating while the machine is active ({status.lower()})"
+            )
+        if not self._ota.get("latestVersion") or not self._ota.get(self._flag_key):
+            raise HomeAssistantError(
+                "The firmware has not confirmed an update for this component yet "
+                "(it checks for updates about 30 minutes after a restart)"
+            )
+        await self.coordinator.start_ota(self._component)
