@@ -24,6 +24,7 @@ from .const import (
     MODE_ICONS,
     MODE_NAMES,
     MachineMode,
+    OTA_STATES,
     UNIQUE_ID_CURRENT_PRESSURE,
     UNIQUE_ID_CURRENT_TEMP,
     UNIQUE_ID_CURRENT_WEIGHT,
@@ -43,6 +44,7 @@ from .const import (
     UNIQUE_ID_TARGET_VOLUME,
     UNIQUE_ID_UPDATE_CONTROLLER,
     UNIQUE_ID_UPDATE_DISPLAY,
+    UNIQUE_ID_UPDATE_PHASE,
     UNIQUE_ID_WATER_LEVEL,
     UNIQUE_ID_TOF_DISTANCE,
     UNIQUE_ID_WARNING_WATER,
@@ -80,6 +82,7 @@ async def async_setup_entry(
     async_add_entities(
         GaggiMateSensor(coordinator, entry, description) for description in SENSORS
     )
+    async_add_entities([GaggiMateFirmwareUpdatePhaseSensor(coordinator, entry)])
 
 
 class GaggiMateEntity(CoordinatorEntity[GaggiMateCoordinator]):
@@ -111,6 +114,37 @@ class GaggiMateEntity(CoordinatorEntity[GaggiMateCoordinator]):
             self.coordinator.available
             and self.coordinator.data is not None
         )
+
+
+class GaggiMateFirmwareUpdatePhaseSensor(GaggiMateEntity, SensorEntity):
+    """What the firmware update is doing: idle, updating, finished, rebooting or failed."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = OTA_STATES
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_translation_key = "firmware_update_phase"
+    _attr_icon = "mdi:update"
+
+    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{coordinator.host}_{UNIQUE_ID_UPDATE_PHASE}"
+        self._attr_name = "Firmware Update Phase"
+
+    @property
+    def available(self) -> bool:
+        """Stay available while the machine flashes or restarts after an update."""
+        return self.coordinator.ota_busy or super().available
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.ota_state
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "component": self.coordinator.ota_component,
+            "progress": self.coordinator.ota_progress,
+        }
 
 
 class GaggiMateSensor(GaggiMateEntity, SensorEntity):
@@ -460,7 +494,7 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         name="Display Update Available",
         icon="mdi:update",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda _, coordinator: coordinator.ota_settings.get("displayUpdateAvailable"),
+        value_fn=lambda _, coordinator: coordinator.ota_settings.get("displayUpdateAvailable") if coordinator.ota_settings.get("latestVersion") else None,
     ),
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_SW_CONTROLLER,
@@ -474,14 +508,14 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         name="Controller Update Available",
         icon="mdi:update",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda _, coordinator: coordinator.ota_settings.get("controllerUpdateAvailable"),
+        value_fn=lambda _, coordinator: coordinator.ota_settings.get("controllerUpdateAvailable") if coordinator.ota_settings.get("latestVersion") else None,
     ),
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_LATEST_VERSION,
         name="Latest Software Version",
         icon="mdi:application-braces",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda _, coordinator: coordinator.ota_settings.get("latestVersion"),
+        value_fn=lambda _, coordinator: coordinator.ota_settings.get("latestVersion") or None,
     ),
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_WATER_LEVEL,
