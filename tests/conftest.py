@@ -66,6 +66,18 @@ if sys.platform == "win32":
 
 
 @pytest.fixture(autouse=True)
+async def enable_event_loop_debug() -> None:
+    """Override PHACC's fixture of the same name: asyncio debug mode is off unless asked for.
+
+    Debug mode captures a stack trace for every scheduled callback and made up roughly 60 % of the
+    CPU time of a test (Home Assistant itself schedules thousands of callbacks per setup). Run
+    ``GAGGIMATE_TEST_LOOP_DEBUG=1 pytest`` to get PHACC's original behaviour (slow-callback logging etc.).
+    """
+    if os.environ.get("GAGGIMATE_TEST_LOOP_DEBUG"):
+        asyncio.get_running_loop().set_debug(True)
+
+
+@pytest.fixture(autouse=True)
 def _enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Make Home Assistant load custom_components/gaggimate."""
 

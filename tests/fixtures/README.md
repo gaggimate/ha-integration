@@ -8,7 +8,7 @@ GaggiMate firmware (`WebSocketHandler.cpp`, `publishState()` / `publishTelemetry
   `tof_tank`, `scale_connected`, `warnings_full`: `{"state": <slow evt:status frame>,
   "telemetry": <fast evt:status frame>}`. The fake server sends `state` then `telemetry` when a
   client connects.
-* Step 8 tank and steam-level fixtures, all synthetic (each has a `description` naming the base fixture):
+* Tank and steam-level fixtures, all synthetic (each has a `description` naming the base fixture):
   `single_boiler_tof` (single boiler with a ToF tank: `htl` false, `tlo` null, `wl` 64),
   `tank_switch` (`htl` true, `tlo` true, `tofc` false, `wl` 100),
   `steam_level` (dual boiler with `hsl` true, `sbl` false, `htl` false, `tlo` null).

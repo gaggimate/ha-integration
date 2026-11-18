@@ -4,7 +4,7 @@ trim_shot_history:
   fields:
     max_shots:
       name: Maximum shots to keep
-      description: Maximum number of most recent shots to keep on the device. Older shots beyond this number will be deleted.
+      description: Keep this many newest shots; older shots will be removed. With keep_annotated, annotated shots are kept even when older than these shots and do not count toward this number.
       required: true
       example: 50
       selector:

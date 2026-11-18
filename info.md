@@ -11,11 +11,19 @@ Control and monitor your GaggiMate smart espresso machine upgrade system from Ho
 
 ## Features
 
-- Real-time temperature monitoring
-- Machine power control
-- Mode selection (Standby, Brew, Steam, Hot Water, Grind)
-- Start/Stop brew controls
+- Real-time temperature, pressure, power and flow monitoring
+- Mode selection (Standby, Brew, Steam, Hot Water, Grind; dual-boiler machines offer Standby, Brew and Grind)
+- Start/Stop brew, flush and grind controls, and the steam heater on dual-boiler machines
+- Confirm or cancel brews that a warning blocked
+- Backflush and descaling status, start and mark-done controls
+- Scale weight from a BLE scale or hardware scale
+- Shot and machine events for automations
+- Controller state, link health and firmware update status
+- Entities appear as the machine reports its capabilities
 - Automatic WebSocket reconnection
+- Service to trim stored shot history
+
+See the [README](https://github.com/gaggimate/ha-integration#readme) for the full entity list and the firmware requirements.
 
 ## Support
 
