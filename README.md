@@ -40,7 +40,7 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Current Pressure | Live pressure reading from the machine | Pressure |
 | Target Pressure | Desired pressure target | Pressure |
 | Pump Flow | Current pump flow rate | - |
-| Mode | Active machine mode (Standby, Brew, Steam, Hot Water, Grind) | - |
+| Mode | Active machine mode (Standby, Brew, Steam, Hot Water, Grind); dual-boiler machines report Brew for Steam/Hot Water | - |
 | Status | Derived machine status (Idle, Brewing, Steaming, Grinding, Pouring Water) | - |
 | Process Phase | Current process phase label from the machine (e.g. infusion, brew, finished) | - |
 | Selected Profile | Currently active brewing profile | - |
@@ -59,7 +59,7 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Entity | Type | Description |
 |--------|------|-------------|
 | Machine Active | Switch | Turn the machine on/off |
-| Mode | Select | Choose machine operating mode |
+| Mode | Select | Choose machine operating mode (dual-boiler machines offer Standby, Brew and Grind only) |
 | Profile | Select | Choose brewing profile |
 | Target Temperature Setpoint | Number | Set desired temperature (0–160 °C) |
 | Start Brew | Button | Begin brewing operation |
@@ -370,6 +370,13 @@ An example Home Assistant dashboard is available in the [`examples/dashboard`](e
 - Check the integration logs: Settings → System → Logs
 - Try reloading the integration: Settings → Devices & Services → GaggiMate → ⋮ → Reload
 - Verify the WebSocket connection is stable
+
+**Problem**: "GaggiMate is not ready" error from Machine Active, Mode or Start Brew
+- These commands are rejected until the controller link is up and the machine reports state "ready" (e.g. while it is starting or waiting for the controller)
+- Check the System State / controller connection and try again once the machine is ready
+
+**Problem**: Mode select does not offer Steam / Hot Water, or an automation selecting them fails
+- On dual-boiler machines the firmware maps Steam and Hot Water to Brew, so the Mode select only offers Standby, Brew and Grind; automations selecting Steam or Hot Water get an invalid-option error
 
 **Problem**: Scale weight not showing
 - Ensure your BLE scale is paired with the GaggiMate (not Home Assistant)

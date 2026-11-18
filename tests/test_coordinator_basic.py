@@ -209,18 +209,14 @@ async def test_temperature_steps_on_the_wire(
     assert len(fake_gaggimate.requests_of("req:lower-temp")) == 2
 
 
-async def test_known_bug_profiles_list_request_never_resolved(
+async def test_profiles_list_request_resolves_quickly(
     fake_gaggimate: FakeGaggiMate, setup_integration: SetupIntegration
 ) -> None:
-    """Pins a known defect of origin/main (plan 2a "Existing client bugs" (1)).
-
-    `res:profiles:list` updates the profile list but is consumed before its `rid` future is
-    resolved, so the pending request only ends by timeout (30 s) or connection loss.
-    Step 2 fixes this; this test must then be inverted.
-    """
+    """Step 2 (a): `res:profiles:list` resolves its pending request and still fills `profiles`."""
     coordinator = await setup_integration()
     assert coordinator.profiles
-    assert len(coordinator._pending_requests) == 1
+    await wait_until(lambda: not coordinator._pending_requests, timeout=2)
+    assert coordinator._pending_requests == {}
 
 
 async def test_no_real_network(fake_gaggimate: FakeGaggiMate, setup_integration: SetupIntegration) -> None:

@@ -111,9 +111,7 @@ async def wait_until(predicate: Callable[[], bool], timeout: float = 5.0, interv
 
 
 async def settle(delay: float = 0.05) -> None:
-    """Let queued callbacks run. Deliberately NOT ``hass.async_block_till_done()``: while the
-    integration has an unresolved ``req:profiles:list`` task (known bug, plan 2a (1)) that call
-    would wait for WS_REQUEST_TIMEOUT (30 s)."""
+    """Let queued callbacks run (short real-time sleep)."""
     await asyncio.sleep(delay)
 
 
@@ -140,15 +138,7 @@ async def setup_integration(
 
     yield _setup
 
-    # Unload explicitly: otherwise hass teardown waits for the in-flight `req:profiles:list`
-    # request (the integration never resolves it, see test_profiles_list_request_stays_pending)
-    # until WS_REQUEST_TIMEOUT (30 s).
+    # Unload explicitly so teardown order is deterministic.
     if mock_config_entry.state is ConfigEntryState.LOADED:
-        # Quiesce the server first and let in-flight frames drain: unloading while frames are
-        # still arriving can leave aiohttp's websocket heartbeat timer behind on the cancelled
-        # listener (observed flaky "Lingering timer after test ... _send_heartbeat", ~40 % of
-        # runs after a reconnect; aiohttp can re-arm its websocket heartbeat timer after the socket closed when the listener is cancelled mid-frame; harmless in production, but PHACC flags it as a lingering timer).
-        fake_gaggimate.keepalive = False
-        await asyncio.sleep(0.3)
         await hass.config_entries.async_unload(mock_config_entry.entry_id)
         await hass.async_block_till_done()

@@ -40,6 +40,8 @@ class FakeGaggiMate:
         self.profiles: list[dict[str, Any]] = load_json("profiles_list")["response"]["profiles"]
         self.ota_settings: dict[str, Any] = load_json("ota_settings")["response"]
         self.keepalive = True
+        # When set, `req:profiles:list` is answered with this error (and no `profiles`).
+        self.profiles_list_error: str | None = None
         self.keepalive_interval = 0.2
         self.send_initial = True
         # Legacy `req:history:list` answer; None emulates current firmware (no `history` key).
@@ -121,7 +123,10 @@ class FakeGaggiMate:
         self.requests.append(req)
         tp = req.get("tp", "")
         if tp == "req:profiles:list":
-            await self._respond(ws, req, "res:profiles:list", profiles=self.profiles)
+            if self.profiles_list_error:
+                await self._respond(ws, req, "res:profiles:list", error=self.profiles_list_error)
+            else:
+                await self._respond(ws, req, "res:profiles:list", profiles=self.profiles)
         elif tp == "req:ota-settings":
             await ws.send_json(self.ota_settings)
         elif tp == "req:profiles:select":

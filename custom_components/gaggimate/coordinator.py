@@ -18,9 +18,11 @@ from .const import (
     MSG_TYPE_FLUSH_START,
     MSG_TYPE_MODE_CHANGE,
     MSG_TYPE_OTA_SETTINGS,
+    MSG_TYPE_OTA_SETTINGS_RESPONSE,
     MSG_TYPE_PROCESS_ACTIVATE,
     MSG_TYPE_PROCESS_DEACTIVATE,
     MSG_TYPE_PROFILES_LIST,
+    MSG_TYPE_PROFILES_LIST_RESPONSE,
     MSG_TYPE_PROFILES_SELECT,
     MSG_TYPE_STATUS,
     MSG_TYPE_TEMP_LOWER,
@@ -36,6 +38,14 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _ws_timeout(seconds: float) -> Any:
+    """Build the ws_connect timeout (ClientWSTimeout needs aiohttp >= 3.11)."""
+    ws_timeout = getattr(aiohttp, "ClientWSTimeout", None)
+    if ws_timeout is None:
+        return seconds
+    return ws_timeout(ws_close=seconds)
 
 
 class GaggiMateCoordinator(DataUpdateCoordinator):
@@ -79,11 +89,16 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         if self._shutting_down:
             return
 
-        _LOGGER.warning("GaggiMate _connect() called")
         if self._session is None:
             self._session = aiohttp.ClientSession()
 
-        await self._connect()
+        try:
+            await self._connect()
+        except Exception:
+            # Setup will be retried with a new coordinator; do not leak the session
+            await self._session.close()
+            self._session = None
+            raise
 
         # Start availability checker once
         if self._availability_check_task is None:
@@ -99,21 +114,24 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                 await self._availability_check_task
             self._availability_check_task = None
 
-        if self._listen_task:
-            self._listen_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._listen_task
-            self._listen_task = None
-
         if self._reconnect_task:
             self._reconnect_task.cancel()
             with suppress(asyncio.CancelledError):
                 await self._reconnect_task
             self._reconnect_task = None
 
-        if self._ws and not self._ws.closed:
-            await self._ws.close()
-            self._ws = None
+        # Close the websocket first, then cancel the listener.
+        ws = self._ws
+        self._ws = None
+        if ws is not None and not ws.closed:
+            with suppress(Exception):
+                await ws.close()
+
+        if self._listen_task:
+            self._listen_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._listen_task
+            self._listen_task = None
 
         if self._session:
             await self._session.close()
@@ -121,10 +139,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
     async def _connect(self) -> None:
         """Connect to WebSocket, ensuring only one connection attempt at a time."""
-        _LOGGER.warning(">>> GAGGIMATE CONNECT ENTRY <<<")
-        _LOGGER.warning("ENTER _CONNECT BEFORE LOCK")
         async with self._connect_lock:
-            _LOGGER.warning("ENTERED CONNECT LOCK")
             if self._shutting_down:
                 return
 
@@ -147,13 +162,17 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
                 _LOGGER.info("Connecting to GaggiMate at %s", self.ws_url)
 
-                self._ws = await self._session.ws_connect(
-                    self.ws_url,
-                    timeout=aiohttp.ClientTimeout(total=WS_CONNECT_TIMEOUT),
-                    heartbeat=30,
+                self._ws = await asyncio.wait_for(
+                    self._session.ws_connect(
+                        self.ws_url,
+                        timeout=_ws_timeout(WS_CONNECT_TIMEOUT),
+                    ),
+                    timeout=WS_CONNECT_TIMEOUT,
                 )
 
                 _LOGGER.info("Successfully connected to GaggiMate")
+                # Grace period for the availability watchdog (no heartbeat is used)
+                self._last_status_time = time.monotonic()
                 self._reconnect_attempt = 0
 
                 # Start listener
@@ -164,11 +183,13 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                 self.hass.async_create_task(self.request_profiles_list())
 
             except Exception as err:
-                _LOGGER.error("Failed to connect to GaggiMate: %s", err)
-
+                reason = str(err) or type(err).__name__
+                if isinstance(err, asyncio.TimeoutError):
+                    reason = str(err) or "timed out"
+                # Log level is chosen by the caller (first failure vs. retries)
                 # DO NOT trigger reconnect from inside locked context
                 # just let caller handle it
-                raise UpdateFailed(f"Failed to connect: {err}") from err
+                raise UpdateFailed(f"Failed to connect: {reason}") from err
 
     async def _listen(self) -> None:
         """Listen for messages from the WebSocket."""
@@ -224,15 +245,26 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                 self.async_set_updated_data({**(self.data or {}), **message})
                 return
 
-            if msg_type == "res:ota-settings":
+            # Resolve the pending request first, for every response type
+            rid = message.get("rid")
+            if rid and rid in self._pending_requests:
+                future = self._pending_requests.pop(rid)
+                if not future.done():
+                    future.set_result(message)
+
+            if msg_type == MSG_TYPE_OTA_SETTINGS_RESPONSE:
                 self._ota_settings = message
                 self.async_update_listeners()
                 return
 
-            if msg_type == "res:profiles:list":
-                profiles = message.get("profiles", [])
+            if msg_type == MSG_TYPE_PROFILES_LIST_RESPONSE:
+                profiles = message.get("profiles")
+                if message.get("error") or not isinstance(profiles, list):
+                    return
                 new_profiles: dict[str, str] = {}
                 for profile in profiles:
+                    if not isinstance(profile, dict):
+                        continue
                     label = profile.get("label")
                     pid = profile.get("id")
                     if label and pid:
@@ -240,12 +272,6 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                 self._profiles = new_profiles
                 self.async_update_listeners()
                 return
-
-            rid = message.get("rid")
-            if rid and rid in self._pending_requests:
-                future = self._pending_requests.pop(rid)
-                if not future.done():
-                    future.set_result(message)
 
         except json.JSONDecodeError as err:
             _LOGGER.error("Invalid WebSocket JSON: %s", err)
@@ -268,7 +294,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                 delay_index = min(self._reconnect_attempt, len(WS_RECONNECT_DELAYS) - 1)
                 delay = WS_RECONNECT_DELAYS[delay_index]
 
-                _LOGGER.warning(
+                _LOGGER.info(
                     "Reconnect attempt %s in %s seconds",
                     self._reconnect_attempt + 1,
                     delay,
@@ -286,7 +312,9 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
                 except Exception as err:
                     self._reconnect_attempt += 1
-                    _LOGGER.error("Reconnect failed: %s", err)
+                    # First failure of an outage is a warning, retries are debug noise
+                    level = logging.WARNING if self._reconnect_attempt == 1 else logging.DEBUG
+                    _LOGGER.log(level, "Reconnect failed: %s", err)
 
         except asyncio.CancelledError:
             raise
@@ -348,13 +376,37 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
         try:
             await self.send_message(message)
-            return await asyncio.wait_for(future, timeout=WS_REQUEST_TIMEOUT)
+            response = await asyncio.wait_for(future, timeout=WS_REQUEST_TIMEOUT)
         except asyncio.TimeoutError as err:
-            self._pending_requests.pop(rid, None)
             raise UpdateFailed("Timed out waiting for response") from err
+        finally:
+            self._pending_requests.pop(rid, None)
+
+        error = response.get("error")
+        if error:
+            raise UpdateFailed(str(error))
+        return response
+
+    def _require_ready(self) -> None:
+        """Raise if the controller reports a state other than ready.
+
+        Older firmware sends no "sys" object; then nothing is checked.
+        """
+        sys_state = (self.data or {}).get("sys")
+        if not isinstance(sys_state, dict):
+            return
+        state = sys_state.get("s")
+        if state is None:
+            return
+        if state != "ready":
+            raise UpdateFailed(
+                f"GaggiMate is not ready (state: {state}: {sys_state.get('m', '')})"
+            )
 
     async def set_mode(self, mode: int) -> None:
-        await self.send_message({"tp": MSG_TYPE_MODE_CHANGE, "mode": mode})
+        self._require_ready()
+        # Firmware ignores the mode unless it is a JSON integer
+        await self.send_message({"tp": MSG_TYPE_MODE_CHANGE, "mode": int(mode)})
 
     async def set_temperature(self, temperature: float) -> None:
         if self.data is None:
@@ -375,6 +427,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             await asyncio.sleep(0.05)
 
     async def start_brew(self) -> None:
+        self._require_ready()
         await self.send_message({"tp": MSG_TYPE_PROCESS_ACTIVATE})
 
     async def stop_brew(self) -> None:
