@@ -96,6 +96,10 @@ Entities that depend on a firmware key or capability are created once the machin
 | Start Brew | Button | Begin brewing operation |
 | Stop Brew | Button | Stop active process (brew or steam) |
 | Flush | Button | Trigger flush cycle |
+| Flush Stop | Button | Release a hold-to-flush (no effect during a fixed-length flush) |
+| Clear Process | Button | Clear the finished process state on the machine |
+| Tare Scale | Button | Tare the hardware scale. Only created when the machine reports a hardware scale |
+| Steam Heater | Switch | Turn the steam boiler on/off. Dual-boiler machines only; turning on in standby is rejected, and turning off when already off is a silent no-op. The firmware only has a toggle, so a command is sent only when the state has to change; a change made at the same moment from the web UI or display can still be reversed |
 | Trim Shot History | Service | Remove oldest stored shots, keeping only a specified maximum |
 
 ## Installation

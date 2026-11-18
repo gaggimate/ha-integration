@@ -20,19 +20,24 @@ from .const import (
     HISTORY_INDEX_PATH,
     MSG_TYPE_EVENT_PREFIX,
     MSG_TYPE_FLUSH_START,
+    MSG_TYPE_FLUSH_STOP,
     MSG_TYPE_MODE_CHANGE,
     MSG_TYPE_OTA_SETTINGS,
     MSG_TYPE_OTA_SETTINGS_RESPONSE,
     MSG_TYPE_PROCESS_ACTIVATE,
+    MSG_TYPE_PROCESS_CLEAR,
     MSG_TYPE_PROCESS_DEACTIVATE,
     MSG_TYPE_PROFILES_LIST,
     MSG_TYPE_PROFILES_LIST_RESPONSE,
     MSG_TYPE_PROFILES_SELECT,
+    MSG_TYPE_SCALE_TARE,
     MSG_TYPE_STATUS,
+    MSG_TYPE_STEAM_TOGGLE,
     MSG_TYPE_TEMP_LOWER,
     MSG_TYPE_TEMP_RAISE,
     MachineMode,
     OTA_REFRESH_DELAY,
+    STEAM_TOGGLE_SETTLE,
     MSG_TYPE_HISTORY_DELETE,
     MSG_TYPE_HISTORY_LIST,
     MSG_TYPE_HISTORY_NOTES_GET,
@@ -82,6 +87,8 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         self._ota_settings: dict[str, Any] = {}
         self._event_listeners: list[Callable[[str, dict[str, Any]], None]] = []
         self._ota_refresh_task: asyncio.Task | None = None
+        # Last steam toggle sent: (requested state, monotonic time); see set_steam_heater
+        self._steam_pending: tuple[bool, float] | None = None
 
         # NEW: Protect connection logic and shutdown state
         self._connect_lock = asyncio.Lock()
@@ -498,6 +505,57 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
     async def start_flush(self) -> None:
         await self._request({"tp": MSG_TYPE_FLUSH_START})
+
+    async def stop_flush(self) -> None:
+        """Release a hold-to-flush (the firmware ignores it during a fixed-length flush)."""
+        response = await self._request({"tp": MSG_TYPE_FLUSH_STOP})
+        if response.get("success") is False:
+            raise UpdateFailed("Flush stop failed")
+
+    async def clear_process(self) -> None:
+        """Clear the finished process state (no response from the firmware)."""
+        await self.send_message({"tp": MSG_TYPE_PROCESS_CLEAR})
+
+    async def tare_scale(self) -> None:
+        """Tare the scale (no response from the firmware)."""
+        await self.send_message({"tp": MSG_TYPE_SCALE_TARE})
+
+    async def set_steam_heater(self, on: bool) -> None:
+        """Switch the dual-boiler steam heater on or off.
+
+        The firmware only offers a toggle, so this sends it only when the effective
+        state differs from the requested one. The reported state (`sa`) lags a toggle
+        by up to one status frame, so a toggle sent within STEAM_TOGGLE_SETTLE seconds
+        counts as applied until `sa` confirms it; this makes a rapid repeated call a
+        no-op instead of toggling back. Not covered: another client (web UI, display)
+        toggling at the same moment, which cannot be detected from here.
+        """
+        sa = (self.data or {}).get("sa")
+        if not isinstance(sa, bool):
+            raise UpdateFailed("Steam heater state unknown")
+
+        effective = sa
+        pending = self._steam_pending
+        if pending is not None:
+            requested, sent_at = pending
+            if sa == requested or time.monotonic() - sent_at >= STEAM_TOGGLE_SETTLE:
+                self._steam_pending = None
+            else:
+                effective = requested
+
+        if effective == on:
+            return
+        if (self.data or {}).get("m") == MachineMode.STANDBY:
+            raise UpdateFailed("Steam heater cannot be changed in standby")
+
+        # Record before the await so a concurrent call sees it
+        self._steam_pending = (on, time.monotonic())
+        try:
+            await self.send_message({"tp": MSG_TYPE_STEAM_TOGGLE})
+        except BaseException:
+            # Includes cancellation: a toggle that was never sent must not count as applied
+            self._steam_pending = None
+            raise
 
     async def request_profiles_list(self) -> None:
         try:
