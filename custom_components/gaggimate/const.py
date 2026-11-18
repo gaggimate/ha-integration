@@ -13,6 +13,8 @@ DEFAULT_SCAN_INTERVAL = 1  # seconds
 WS_CONNECT_TIMEOUT = 10  # seconds
 WS_RECONNECT_DELAYS = [1, 2, 4, 8, 16, 30]  # seconds
 WS_REQUEST_TIMEOUT = 30  # seconds
+HISTORY_INDEX_PATH = "/api/history/index.bin"
+HISTORY_INDEX_MAX_BYTES = 2 * 1024 * 1024  # size cap for the shot index download
 WS_UNAVAILABLE_TIMEOUT = 15  # seconds - mark unavailable if no status for 15 seconds
 
 # Message types

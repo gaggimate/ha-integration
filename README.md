@@ -116,6 +116,8 @@ The integration will automatically discover all available entities and create th
 Deletes the oldest shot logs on each connected GaggiMate so that no more than `max_shots` non-annotated shots remain.
 When `keep_annotated: true` is set, shots with notes, ratings, bean type, or grind settings are excluded from trimming entirely; `max_shots` applies only to the remaining non-annotated shots.
 
+**Firmware requirement:** current firmware no longer offers a shot list over the websocket. The service reads the shot index from `http://<host>:<port>/api/history/index.bin` (the same file the web UI uses) and falls back to the old websocket list only if the device answers 404 for it. If the index cannot be read or has an unknown format/version, the service fails with an error and deletes nothing. With `keep_annotated`, every shot is checked individually for notes (one request per shot), because the index flags are not reliable; shots that cannot be checked are kept and reported as an error. Shots are deleted one by one; if any device cannot be read or any deletion fails, the service reports an error after processing all devices.
+
 Example automation:
 
 ```yaml

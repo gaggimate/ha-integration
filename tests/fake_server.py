@@ -49,6 +49,13 @@ class FakeGaggiMate:
         self.history_delete_errors: dict[str, str] = {}
         self.notes: dict[str, dict[str, Any]] = {}
         self.index_bin: bytes | None = None  # served at /api/history/index.bin, 404 if None
+        # Non-200 status for the index (e.g. 500/503); index_redirect answers 302 to /elsewhere.
+        self.index_status: int | None = None
+        self.index_redirect = False
+        self.index_requests = 0
+        self.redirect_followed = 0
+        # shot id (str) -> error text for req:history:notes:get
+        self.notes_errors: dict[str, str] = {}
         self.requests: list[dict[str, Any]] = []
         self.connections: list[web.WebSocketResponse] = []
         self.connect_count = 0
@@ -60,6 +67,7 @@ class FakeGaggiMate:
         app = web.Application()
         app.router.add_get("/ws", self._ws_handler)
         app.router.add_get("/api/history/index.bin", self._index_handler)
+        app.router.add_get("/elsewhere", self._elsewhere_handler)
         self._server = TestServer(app, host="127.0.0.1")
         await self._server.start_server()
         self._keepalive_task = asyncio.create_task(self._keepalive_loop())
@@ -87,7 +95,16 @@ class FakeGaggiMate:
         return self._server.port
 
     # -- server side handlers ---------------------------------------------
+    async def _elsewhere_handler(self, request: web.Request) -> web.Response:
+        self.redirect_followed += 1
+        return web.Response(body=self.index_bin or b"", content_type="application/octet-stream")
+
     async def _index_handler(self, request: web.Request) -> web.Response:
+        self.index_requests += 1
+        if self.index_redirect:
+            raise web.HTTPFound("/elsewhere")
+        if self.index_status is not None:
+            return web.Response(status=self.index_status)
         if self.index_bin is None:
             return web.Response(status=404)
         return web.Response(body=self.index_bin, content_type="application/octet-stream")
@@ -148,7 +165,11 @@ class FakeGaggiMate:
             else:
                 await self._respond(ws, req, "res:history:delete")
         elif tp == "req:history:notes:get":
-            await self._respond(ws, req, "res:history:notes:get", notes=self.notes.get(str(req.get("id")), {}))
+            nerr = self.notes_errors.get(str(req.get("id")))
+            if nerr:
+                await self._respond(ws, req, "res:history:notes:get", error=nerr)
+            else:
+                await self._respond(ws, req, "res:history:notes:get", notes=self.notes.get(str(req.get("id")), {}))
         # everything else is fire-and-forget in the firmware: no reply
 
     # -- test helpers ------------------------------------------------------

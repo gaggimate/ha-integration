@@ -1,7 +1,6 @@
 """The GaggiMate integration."""
 from __future__ import annotations
 
-import asyncio
 import logging
 
 import voluptuous as vol
@@ -20,6 +19,7 @@ from .const import (
     SERVICE_TRIM_SHOT_HISTORY,
 )
 from .coordinator import GaggiMateCoordinator
+from .history import async_trim_shot_history
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,127 +60,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def _async_trim_shot_history(call: ServiceCall) -> None:
         """Trim shot history on all configured devices, keeping only newest max_shots entries each."""
 
-        max_shots = call.data.get(ATTR_MAX_SHOTS)
-        if not isinstance(max_shots, int) or max_shots <= 0:
-            raise ValueError("max_shots must be a positive integer")
-        keep_annotated: bool = bool(call.data.get(ATTR_KEEP_ANNOTATED))
-
         coordinators: list[GaggiMateCoordinator] = list(hass.data.get(DOMAIN, {}).values())
-        if not coordinators:
-            raise ValueError("No GaggiMate devices are configured")
-
-        # Process each coordinator independently
-        for coordinator in coordinators:
-            history = await coordinator.request_history_list()
-
-            # Sort by timestamp ascending to delete oldest first; fall back to ID when timestamp missing
-            def _sort_key(item: dict) -> tuple:
-                ts = item.get("timestamp")
-                try:
-                    ts_val = int(ts)
-                except (TypeError, ValueError):
-                    ts_val = 0
-                try:
-                    id_val = int(item.get("id"))
-                except (TypeError, ValueError):
-                    id_val = 0
-                return ts_val, id_val
-
-            sorted_history = sorted(history, key=_sort_key)
-
-            if keep_annotated:
-                _ANNOTATION_FIELDS = ("rating", "beanType", "grindSetting", "notes")
-
-                def _has_annotation(notes: dict) -> bool:
-                    if not isinstance(notes, dict) or not notes:
-                        return False
-                    for key in _ANNOTATION_FIELDS:
-                        value = notes.get(key)
-                        if value in (None, "", 0, 0.0, False):
-                            continue
-                        return True
-                    return False
-
-                # Separate annotated from non-annotated shots
-                non_annotated: list[dict] = []
-                annotated_count = 0
-                for item in sorted_history:
-                    shot_id = item.get("id")
-                    if shot_id is None:
-                        non_annotated.append(item)
-                        continue
-                    try:
-                        notes = await coordinator.get_history_notes(shot_id)
-                    except Exception as err:  # noqa: BLE001
-                        _LOGGER.warning(
-                            "Cannot determine annotation status for shot %s on %s: %s",
-                            shot_id,
-                            coordinator.host,
-                            err,
-                        )
-                        annotated_count += 1
-                        continue
-
-                    if _has_annotation(notes):
-                        annotated_count += 1
-                    else:
-                        non_annotated.append(item)
-                    await asyncio.sleep(0)
-
-                if annotated_count:
-                    _LOGGER.info(
-                        "Preserved %s annotated shots on %s",
-                        annotated_count,
-                        coordinator.host,
-                    )
-
-                # Trim only the non-annotated shots to max_shots
-                if len(non_annotated) <= max_shots:
-                    _LOGGER.info(
-                        "Shot history trim skipped for %s: %s non-annotated entries <= max_shots=%s",
-                        coordinator.host,
-                        len(non_annotated),
-                        max_shots,
-                    )
-                    continue
-
-                to_delete = non_annotated[:-max_shots]
-            else:
-                if len(sorted_history) <= max_shots:
-                    _LOGGER.info(
-                        "Shot history trim skipped for %s: %s entries <= max_shots=%s",
-                        coordinator.host,
-                        len(sorted_history),
-                        max_shots,
-                    )
-                    continue
-
-                to_delete = sorted_history[:-max_shots]
-            deleted = 0
-            failures: list[str] = []
-            for idx, item in enumerate(to_delete, start=1):
-                shot_id = item.get("id")
-                if shot_id is None:
-                    continue
-                try:
-                    await coordinator.delete_history_item(shot_id)
-                    deleted += 1
-                except Exception as err:  # noqa: BLE001 - best-effort cleanup
-                    failures.append(f"{shot_id}: {err}")
-                # Yield to event loop between deletions and avoid hammering device
-                if idx % 10 == 0:
-                    await asyncio.sleep(0.1)
-                else:
-                    await asyncio.sleep(0)
-
-            msg = (
-                "Trimmed shot history for %s, kept %s newest, deleted %s older entries"
-                % (coordinator.host, max_shots, deleted)
-            )
-            if failures:
-                _LOGGER.warning("%s; failed deletions: %s", msg, "; ".join(failures))
-            else:
-                _LOGGER.info(msg)
+        await async_trim_shot_history(
+            coordinators,
+            call.data.get(ATTR_MAX_SHOTS),
+            bool(call.data.get(ATTR_KEEP_ANNOTATED)),
+        )
 
     # Register the service once globally
     if DATA_SERVICES not in hass.data:

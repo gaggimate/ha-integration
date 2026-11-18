@@ -15,6 +15,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import (
     DOMAIN,
+    HISTORY_INDEX_MAX_BYTES,
+    HISTORY_INDEX_PATH,
     MSG_TYPE_FLUSH_START,
     MSG_TYPE_MODE_CHANGE,
     MSG_TYPE_OTA_SETTINGS,
@@ -36,6 +38,8 @@ from .const import (
     WS_REQUEST_TIMEOUT,
     WS_UNAVAILABLE_TIMEOUT,
 )
+
+from .history import parse_shot_index
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -457,6 +461,47 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         if history is None or not isinstance(history, list):
             raise UpdateFailed("Invalid history list response")
         return history
+
+    @property
+    def http_base_url(self) -> str:
+        """Return the HTTP base URL of the device."""
+        protocol = "https" if self.use_ssl else "http"
+        return f"{protocol}://{self.host}:{self.port}"
+
+    async def async_fetch_history_index(self) -> list[dict[str, Any]]:
+        """Return the shot history entries (without deleted ones).
+
+        Current firmware serves a binary index over HTTP; only if that returns 404
+        the legacy websocket list is tried. Any other problem raises and must
+        abort the caller (no deletes after a read/parse error).
+        """
+        if self._session is None or self._session.closed:
+            raise UpdateFailed("Not connected")
+        url = f"{self.http_base_url}{HISTORY_INDEX_PATH}"
+        legacy = False
+        data = bytearray()
+        try:
+            timeout = aiohttp.ClientTimeout(total=WS_REQUEST_TIMEOUT)
+            async with self._session.get(url, timeout=timeout, allow_redirects=False) as resp:
+                if resp.status == 404:
+                    legacy = True
+                elif resp.status != 200:
+                    raise UpdateFailed(f"Shot index request failed: HTTP {resp.status}")
+                if not legacy:
+                    if (resp.content_length or 0) > HISTORY_INDEX_MAX_BYTES:
+                        raise UpdateFailed("Shot index is too large")
+                    async for chunk in resp.content.iter_chunked(8192):
+                        data.extend(chunk)
+                        if len(data) > HISTORY_INDEX_MAX_BYTES:
+                            raise UpdateFailed("Shot index is too large")
+        except UpdateFailed:
+            raise
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            raise UpdateFailed(f"Failed to fetch shot index: {err or type(err).__name__}") from err
+        if legacy:
+            _LOGGER.debug("No shot index at %s, trying legacy history list", url)
+            return await self.request_history_list()
+        return parse_shot_index(bytes(data))
 
     async def delete_history_item(self, shot_id: int | str) -> None:
         await self._request({"tp": MSG_TYPE_HISTORY_DELETE, "id": str(shot_id)})
