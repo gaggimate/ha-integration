@@ -13,17 +13,21 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
+    UNIQUE_ID_BACKFLUSH_COMPLETE,
+    UNIQUE_ID_BACKFLUSH_START,
     UNIQUE_ID_BREW_CONFIRM,
     UNIQUE_ID_BREW_CONFIRM_CANCEL,
     UNIQUE_ID_BREW_START,
     UNIQUE_ID_BREW_STOP,
+    UNIQUE_ID_DESCALING_COMPLETE,
+    UNIQUE_ID_DESCALING_START,
     UNIQUE_ID_FLUSH,
     UNIQUE_ID_FLUSH_STOP,
     UNIQUE_ID_PROCESS_CLEAR,
     UNIQUE_ID_TARE_SCALE,
 )
 from .coordinator import GaggiMateCoordinator
-from .entity import async_setup_gated, cap
+from .entity import async_setup_gated, cap, has_warning_key
 from .sensor import GaggiMateEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -74,6 +78,38 @@ BUTTONS: tuple[GaggiMateButtonEntityDescription, ...] = (
         icon="mdi:coffee-maker-off",
         press_fn=lambda coordinator: coordinator.cancel_brew_confirm(),
         available_fn=lambda coordinator: coordinator.brew_confirm is not None,
+    ),
+    GaggiMateButtonEntityDescription(
+        key=UNIQUE_ID_BACKFLUSH_START,
+        name="Start Backflush",
+        icon="mdi:coffee-maker",
+        # Selects the backflush profile and runs the pump: disabled by default (see README)
+        press_fn=lambda coordinator: coordinator.start_cleaning("backflush"),
+        supported_fn=has_warning_key("backflush"),
+        entity_registry_enabled_default=False,
+    ),
+    GaggiMateButtonEntityDescription(
+        key=UNIQUE_ID_BACKFLUSH_COMPLETE,
+        name="Mark Backflush Done",
+        icon="mdi:check-circle-outline",
+        press_fn=lambda coordinator: coordinator.complete_cleaning("backflush"),
+        supported_fn=has_warning_key("backflush"),
+    ),
+    GaggiMateButtonEntityDescription(
+        key=UNIQUE_ID_DESCALING_START,
+        name="Start Descaling",
+        icon="mdi:flask-outline",
+        # Selects the descaling profile and runs the pump: disabled by default (see README)
+        press_fn=lambda coordinator: coordinator.start_cleaning("descaling"),
+        supported_fn=has_warning_key("descaling"),
+        entity_registry_enabled_default=False,
+    ),
+    GaggiMateButtonEntityDescription(
+        key=UNIQUE_ID_DESCALING_COMPLETE,
+        name="Mark Descaling Done",
+        icon="mdi:check-circle-outline",
+        press_fn=lambda coordinator: coordinator.complete_cleaning("descaling"),
+        supported_fn=has_warning_key("descaling"),
     ),
 )
 

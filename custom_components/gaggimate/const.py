@@ -58,6 +58,19 @@ MSG_TYPE_PROFILES_LIST_RESPONSE = "res:profiles:list"
 MSG_TYPE_HISTORY_LIST = "req:history:list"
 MSG_TYPE_HISTORY_DELETE = "req:history:delete"
 MSG_TYPE_HISTORY_NOTES_GET = "req:history:notes:get"
+# Cleaning: the firmware answers the requests with res:cleaning:<task>:<action> {success}
+MSG_TYPE_CLEANING_BACKFLUSH_START = "req:cleaning:backflush:start"
+MSG_TYPE_CLEANING_DESCALING_START = "req:cleaning:descaling:start"
+MSG_TYPE_CLEANING_BACKFLUSH_COMPLETE = "req:cleaning:backflush:complete"
+MSG_TYPE_CLEANING_DESCALING_COMPLETE = "req:cleaning:descaling:complete"
+CLEANING_START_MESSAGES = {
+    "backflush": MSG_TYPE_CLEANING_BACKFLUSH_START,
+    "descaling": MSG_TYPE_CLEANING_DESCALING_START,
+}
+CLEANING_COMPLETE_MESSAGES = {
+    "backflush": MSG_TYPE_CLEANING_BACKFLUSH_COMPLETE,
+    "descaling": MSG_TYPE_CLEANING_DESCALING_COMPLETE,
+}
 
 # Machine modes
 class MachineMode(IntEnum):
@@ -152,6 +165,10 @@ UNIQUE_ID_GRIND = "grind"
 UNIQUE_ID_GRIND_BY_WEIGHT = "grind_by_weight"
 UNIQUE_ID_GRIND_TARGET_DURATION = "grind_target_duration"
 UNIQUE_ID_GRIND_TARGET_WEIGHT = "grind_target_weight"
+UNIQUE_ID_BACKFLUSH_START = "backflush_start"
+UNIQUE_ID_BACKFLUSH_COMPLETE = "backflush_complete"
+UNIQUE_ID_DESCALING_START = "descaling_start"
+UNIQUE_ID_DESCALING_COMPLETE = "descaling_complete"
 
 # Services
 ATTR_MAX_SHOTS = "max_shots"

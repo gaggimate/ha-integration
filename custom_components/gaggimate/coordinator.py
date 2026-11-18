@@ -15,6 +15,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    CLEANING_COMPLETE_MESSAGES,
+    CLEANING_START_MESSAGES,
     DOMAIN,
     HISTORY_INDEX_MAX_BYTES,
     HISTORY_INDEX_PATH,
@@ -600,6 +602,25 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
     async def clear_process(self) -> None:
         """Clear the finished process state (no response from the firmware)."""
         await self.send_message({"tp": MSG_TYPE_PROCESS_CLEAR})
+
+    async def start_cleaning(self, kind: str) -> None:
+        """Select the cleaning profile and start it; kind is "backflush" or "descaling".
+
+        The firmware answers success false while a process runs or the profile cannot be
+        selected. success true only means the start was accepted: an error-level warning
+        gives a brew confirmation instead, and an activate the firmware ignores still
+        reports true. The start also forces brew mode and wakes the machine.
+        """
+        self._require_ready()
+        response = await self._request({"tp": CLEANING_START_MESSAGES[kind]})
+        if response.get("success") is False:
+            raise UpdateFailed("Machine busy or profile unavailable")
+
+    async def complete_cleaning(self, kind: str) -> None:
+        """Mark a cleaning as done, resetting its schedule (the firmware has no precondition)."""
+        response = await self._request({"tp": CLEANING_COMPLETE_MESSAGES[kind]})
+        if response.get("success") is False:
+            raise UpdateFailed("Could not mark cleaning as done")
 
     async def tare_scale(self) -> None:
         """Tare the scale (no response from the firmware)."""

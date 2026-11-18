@@ -66,6 +66,12 @@ class FakeGaggiMate:
         self.grind_mode = "normal"
         self.grind_applied = 0
         self._grind_frame_task: asyncio.Task | None = None
+        # Cleaning requests (req:cleaning:<task>:<action>) are answered with
+        # res:cleaning:<task>:<action>. ``cleaning_results`` maps "<task>:<action>" to the answer
+        # fields (default {"success": True}); a None value means the firmware never answers.
+        # ``cleaning_delay`` postpones every cleaning answer by that many seconds.
+        self.cleaning_results: dict[str, dict[str, Any] | None] = {}
+        self.cleaning_delay = 0.0
         self.requests: list[dict[str, Any]] = []
         self.connections: list[web.WebSocketResponse] = []
         self.connect_count = 0
@@ -185,7 +191,18 @@ class FakeGaggiMate:
                 await self._respond(ws, req, "res:history:notes:get", notes=self.notes.get(str(req.get("id")), {}))
         elif tp in ("req:raise-grind-target", "req:lower-grind-target"):
             self._apply_grind_step(1 if tp == "req:raise-grind-target" else -1)
+        elif tp.startswith("req:cleaning:"):
+            _, _, task, action = tp.split(":")
+            await self._answer_cleaning(ws, req, task, action)
         # everything else is fire-and-forget in the firmware: no reply
+
+    async def _answer_cleaning(self, ws: web.WebSocketResponse, req: dict, task: str, action: str) -> None:
+        fields = self.cleaning_results.get(f"{task}:{action}", {"success": True})
+        if fields is None:
+            return
+        if self.cleaning_delay:
+            await asyncio.sleep(self.cleaning_delay)
+        await self._respond(ws, req, f"res:cleaning:{task}:{action}", **fields)
 
     def _apply_grind_step(self, direction: int) -> None:
         if self.grind_mode == "drop":

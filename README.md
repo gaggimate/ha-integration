@@ -128,11 +128,30 @@ action:
 | Grind By Weight | Switch | Grind target type: on = by weight, off = by time. Changes the grind target setting that the machine and its web UI share. Only created when the machine reports a volumetric source (`bta`). Grinding by weight uses a Bluetooth scale only: with just a hardware scale the grind runs for the set time, even when this is on. The switch reflects the effective target: it shows off while no scale is available, even if the stored setting is by weight |
 | Grind Target Duration | Number | Grind time in seconds (5-300, step 1). Only available while the grind target type is time (Grind By Weight off or no scale). Only created when the machine reports `gtd` |
 | Grind Target Weight | Number | Grind weight in grams (5-250, step 0.5). Only available while the grind target type is weight (Grind By Weight on and a scale available). Only created when the machine reports a volumetric source (`bta`) |
+| Start Backflush | Button | Select the backflush profile and start it in brew mode (runs the pump and heater). Only created when the firmware reports the backflush warning; present whether or not a backflush is due. **Disabled by default** (enable it in the entity settings). See [Cleaning](#cleaning) |
+| Mark Backflush Done | Button | Record a backflush as done: resets the backflush schedule and shot count without running the cycle. Only created when the firmware reports the backflush warning; present whether or not a backflush is due |
+| Start Descaling | Button | Select the descaling profile and start it in brew mode (runs the pump and heater). Only created when the firmware reports the descaling warning; present whether or not a descaling is due. **Disabled by default** (enable it in the entity settings). See [Cleaning](#cleaning) |
+| Mark Descaling Done | Button | Record a descaling as done: resets the descaling schedule and shot count without running the cycle. Only created when the firmware reports the descaling warning; present whether or not a descaling is due |
 | Trim Shot History | Service | Remove oldest stored shots, keeping only a specified maximum |
 
 The grind target numbers move the machine's target with repeated raise/lower messages (one per second or 0.5 g, 50 ms apart; the firmware has no absolute setter), so a large change takes a few seconds and can race with another client (web UI, display) changing the same target. Setting the current value sends nothing; the sequence fails with an error if the target type flips or the target stops moving. Values off the step grid are rounded to the nearest step. Calls are serialised, and each waits briefly for the machine to report the new value before it returns.
 
 **Warning:** Grind starts the grinder motor. Check the grinder (hopper, portafilter, cup) before you automate it. Home Assistant refuses to start Grind while a brew runs, because the firmware's start would clear the running brew's scale source.
+
+### Cleaning
+
+Start Backflush and Start Descaling select the machine's cleaning profile and start it in brew mode. The Start buttons are created only when the firmware reports the matching warning (backflush or descaling). The firmware reports these warnings whether or not a cleaning is due, so the buttons exist on those firmware versions even when nothing is due. They are **disabled by default** because they run the pump and heater. Mark Backflush Done and Mark Descaling Done follow the same rule and are enabled by default.
+
+**Warning:** these buttons actuate the machine.
+
+- Start switches the machine to brew mode and wakes it from standby. An unattended automation therefore heats and pumps from cold standby.
+- Start selects the cleaning profile persistently: the next normal brew uses that profile until another profile is selected. This also applies after a cancelled confirmation.
+- Backflush needs a blind basket in the portafilter.
+- Descaling needs descaler in the water tank and the manual steps of the descaling procedure. Check the machine's instructions first.
+- Success is reported when the machine accepts the start, not when the cycle has run. A start can still wait for a brew confirmation: an error-level warning turns on **Brew Confirmation Pending** instead, and the cleaning continues only after **Confirm Brew**. Check that sensor after pressing Start.
+- The schedule resets when the cleaning brew starts, even if the cycle is stopped early. Mark Done is for cleaning you did without the profile; it resets the schedule immediately, whether or not any cleaning was done.
+
+Start Backflush and Start Descaling fail with an error while the machine is not ready or a brew is running, and when the machine cannot select the cleaning profile.
 
 ## Installation
 
