@@ -1,0 +1,118 @@
+{
+  "synthetic": true,
+  "state": {
+    "tp": "evt:status",
+    "m": 1,
+    "p": "Default",
+    "puid": "default",
+    "sa": false,
+    "sca": true,
+    "cp": true,
+    "cd": true,
+    "gp": false,
+    "hs": false,
+    "scaleSource": "inactive",
+    "led": false,
+    "tofc": false,
+    "awl": false,
+    "sd": false,
+    "hl": false,
+    "htl": true,
+    "tlo": true,
+    "hsl": true,
+    "sbl": false,
+    "tw": 0,
+    "bta": 1,
+    "bt": 0,
+    "btd": 30000,
+    "gtd": 25000,
+    "gtv": 40.0,
+    "gt": 0,
+    "gact": 0,
+    "up": false,
+    "sys": {
+      "s": "ready",
+      "m": "",
+      "c": 0
+    },
+    "bc": false,
+    "sbat": null,
+    "warn": [
+      {
+        "k": "water",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "temperature",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "switch",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "flush",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "scaleConnected",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "scaleBattery",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "backflush",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "descaling",
+        "l": 1,
+        "a": false
+      }
+    ]
+  },
+  "telemetry": {
+    "tp": "evt:status",
+    "ct": 93.4,
+    "cst": 125.3,
+    "tst": 145,
+    "db": true,
+    "tt": 93,
+    "pr": 8.9,
+    "fl": 1.3,
+    "pt": 9,
+    "wl": 100,
+    "tof": 0,
+    "lat": -1,
+    "pw": 100,
+    "hp": 40,
+    "lnk": "uart",
+    "rssi": 0,
+    "rtx": 0,
+    "bw": 0,
+    "cw": 18.2,
+    "process": {
+      "a": 1,
+      "s": "brew",
+      "l": "Extraction",
+      "e": 12000,
+      "u": 0,
+      "tt": "time",
+      "pt": 30000,
+      "pp": 12000
+    },
+    "pkr": 1.8,
+    "pf": 1.2,
+    "tf": 1.5,
+    "wp": 14.2
+  }
+}

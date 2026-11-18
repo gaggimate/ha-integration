@@ -1,0 +1,38 @@
+{
+  "synthetic": true,
+  "events": {
+    "brew_confirm": {
+      "tp": "evt:brew:confirm",
+      "warn": [
+        {
+          "k": "water",
+          "l": 2
+        }
+      ]
+    },
+    "brew_confirm_cancel": {
+      "tp": "evt:brew:confirm:cancel"
+    },
+    "shot_saved": {
+      "tp": "evt:history-shot-saved",
+      "id": 42
+    },
+    "shot_finished": {
+      "tp": "evt:shot-finished-stats",
+      "maxPressure": 9.1,
+      "avgFlow": 1.4
+    },
+    "scale_disconnect": {
+      "tp": "evt:scale:disconnect",
+      "address": "AA:BB:CC:DD:EE:FF",
+      "name": "Scale"
+    },
+    "autotune_result": {
+      "tp": "evt:autotune-result",
+      "pid": "1.0,2.0,3.0"
+    },
+    "autotune_failed": {
+      "tp": "evt:autotune-failed"
+    }
+  }
+}

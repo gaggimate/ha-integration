@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "response": {
+    "tp": "res:ota-settings",
+    "hardware": "GaggiMate Pro",
+    "displayVersion": "v1.7.0",
+    "controllerVersion": "v1.7.0",
+    "latestVersion": "v1.7.0",
+    "displayUpdateAvailable": false,
+    "controllerUpdateAvailable": false
+  }
+}

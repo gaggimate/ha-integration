@@ -15,6 +15,7 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 - [Automation Examples](#automation-examples)
 - [Example Dashboard](#example-dashboard)
 - [Troubleshooting](#troubleshooting)
+- [Development / Running Tests](#development--running-tests)
 - [Support](#support)
 - [Contributing](#contributing)
 
@@ -373,6 +374,36 @@ An example Home Assistant dashboard is available in the [`examples/dashboard`](e
 **Problem**: Scale weight not showing
 - Ensure your BLE scale is paired with the GaggiMate (not Home Assistant)
 - Check the scale connection status sensor
+
+## Development / Running Tests
+
+The test suite uses [pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component) (PHACC), pinned in `requirements_test.txt`. PHACC requires **Python 3.14** and does not support native Windows, so run the tests on Linux or WSL. CI runs them on Ubuntu with Python 3.14 (`.github/workflows/tests.yaml`).
+
+**Windows (WSL + uv)**
+
+1. Install WSL with a Linux distribution (from an elevated PowerShell: `wsl --install`, then reboot).
+2. Inside the distribution, install [uv](https://docs.astral.sh/uv/getting-started/installation/) and let it provide Python 3.14:
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   uv python install 3.14
+   ```
+3. From the repository (on the WSL filesystem, e.g. under `~`, for speed):
+   ```bash
+   uv venv --python 3.14 .venv
+   source .venv/bin/activate
+   uv pip install -r requirements_test.txt
+   pytest
+   ```
+
+**Linux / macOS**
+
+```bash
+uv venv --python 3.14 .venv && source .venv/bin/activate
+uv pip install -r requirements_test.txt
+pytest
+```
+
+The tests run against an in-process fake GaggiMate websocket server and do not contact a real machine. Configuration is in `pytest.ini`.
 
 ## Support
 

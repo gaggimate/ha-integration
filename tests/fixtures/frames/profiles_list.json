@@ -1,0 +1,23 @@
+{
+  "synthetic": true,
+  "response": {
+    "tp": "res:profiles:list",
+    "profiles": [
+      {
+        "id": "default",
+        "label": "Default",
+        "utility": false
+      },
+      {
+        "id": "flush",
+        "label": "Flush Utility",
+        "utility": true
+      },
+      {
+        "id": "lever",
+        "label": "Lever Style",
+        "utility": false
+      }
+    ]
+  }
+}

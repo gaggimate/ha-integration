@@ -1,0 +1,3 @@
+# Test dependencies. PHACC pins the Home Assistant version used by the tests and
+# requires Python >= 3.14 (see .github/workflows/tests.yaml). Runs on Linux/WSL only.
+pytest-homeassistant-custom-component==0.13.375
