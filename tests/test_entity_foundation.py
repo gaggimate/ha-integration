@@ -294,7 +294,8 @@ async def test_number_platform_unchanged_and_reload_no_duplicates(
     # + 2 step-6 power sensors (heater_power, pump_power; no puck/flow/steam on a single boiler without cp/cd/db)
     # + 2 step-9 buttons (flush_stop, process_clear; no tare_scale as hs is false; no steam_heater without db)
     # + 3 step-10 always-on entities (brew_confirm_pending, brew_confirm, brew_confirm_cancel)
-    assert total == 50
+    # + 1 step-11 Grind switch (gact present; no Grind By Weight as bta is 0)
+    assert total == 51
 
     for _ in range(2):
         assert await hass.config_entries.async_reload(mock_config_entry.entry_id)
@@ -314,7 +315,8 @@ async def test_number_platform_unchanged_and_reload_no_duplicates(
         )
         assert len(er.async_entries_for_config_entry(registry, mock_config_entry.entry_id)) == total
         # the new coordinator holds a bounded number of listeners (no accumulation across reloads)
-        assert len(coordinator._listeners) <= total + 2
+        # (+3: one gate listener per gated platform setup; step 11 added a second one on switch)
+        assert len(coordinator._listeners) <= total + 3
 
 
 async def test_reload_does_not_leak_gate_listener(

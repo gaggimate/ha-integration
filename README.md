@@ -124,7 +124,11 @@ action:
 | Cancel Brew Confirmation | Button | Dismiss the pending brew confirmation. Available only while Brew Confirmation Pending is on |
 | Tare Scale | Button | Tare the hardware scale. Only created when the machine reports a hardware scale |
 | Steam Heater | Switch | Turn the steam boiler on/off. Dual-boiler machines only; turning on in standby is rejected, and turning off when already off is a silent no-op. The firmware only has a toggle, so a command is sent only when the state has to change; a change made at the same moment from the web UI or display can still be reversed |
+| Grind | Switch | Start or stop the grinder (on = `req:grind:activate`, off = `req:grind:deactivate`); shows whether the grinder is running. Turning on raises an error while the machine is not ready or a brew is running (the firmware would drop the start silently, or clear the brew's scale source); turning off is never blocked by these checks, so a stuck grind can always be stopped. Turning on while already on is a silent no-op. Turning off is sent only while a grind runs and no other process is active, because the firmware's stop also ends any running brew |
+| Grind By Weight | Switch | Grind target type: on = by weight, off = by time. Changes the grind target setting that the machine and its web UI share. Only created when the machine reports a volumetric source (`bta`). Grinding by weight uses a Bluetooth scale only: with just a hardware scale the grind runs for the set time, even when this is on. The switch reflects the effective target: it shows off while no scale is available, even if the stored setting is by weight |
 | Trim Shot History | Service | Remove oldest stored shots, keeping only a specified maximum |
+
+**Warning:** Grind starts the grinder motor. Check the grinder (hopper, portafilter, cup) before you automate it. Home Assistant refuses to start Grind while a brew runs, because the firmware's start would clear the running brew's scale source.
 
 ## Installation
 

@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import GaggiMateCoordinator
+from .coordinator import GaggiMateCoordinator, int_flag
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,6 +70,11 @@ def has_warning_key(key: str) -> GateFn:
         return any(isinstance(w, dict) and w.get("k") == key for w in warnings)
 
     return _gate
+
+
+def flag_is_set(key: str) -> GateFn:
+    """Gate: the 1/0 integer flag is 1. cap() never matches these, as they are not booleans."""
+    return lambda data: int_flag(data, key) is True
 
 
 @callback

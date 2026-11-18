@@ -51,6 +51,9 @@ TANK_STEAM_LEVEL_KEYS = {"tank_level_low", "steam_boiler_low"}
 # flush_stop/process_clear (step 9) and the always-on brew confirmation entities (step 10)
 SIMPLE_COMMAND_KEYS = {"flush_stop", "process_clear", "brew_confirm_pending", "brew_confirm", "brew_confirm_cancel"}
 STEAM_HEATER_KEYS = {"steam_heater"}
+# Step 11: Grind switch with gact present; Grind By Weight switch with bta == 1 (gact is in every fixture).
+GRIND_KEYS = {"grind"}
+GRIND_BY_WEIGHT_KEYS = {"grind_by_weight"}
 
 # Disabled by default in the entity registry (entity_registry_enabled_default=False).
 DISABLED_BY_DEFAULT = {"link_rssi", "link_latency", "link_retransmits", "puck_resistance", "target_flow"}
@@ -69,6 +72,8 @@ PLATFORM_OF = {
     "brew_confirm_cancel": "button",
     "brew_confirm_pending": "binary_sensor",
     "steam_heater": "switch",
+    "grind": "switch",
+    "grind_by_weight": "switch",
     "target_temperature_setpoint": "number",
     "controller_error": "binary_sensor",
     "update_available": "binary_sensor",
@@ -92,14 +97,14 @@ def _entity_id(hass: HomeAssistant, domain: str, key: str) -> str:
     [
         # no backflush/descaling entry in `warn` -> those warning sensors are not created;
         # cp/cd false and db false -> no puck, flow or steam sensors (heater/pump power always, from hp/pw)
-        ("single_boiler_idle", DIAGNOSTIC_KEYS | POWER_KEYS | SIMPLE_COMMAND_KEYS),
-        ("waiting_controller", DIAGNOSTIC_KEYS | POWER_KEYS | SIMPLE_COMMAND_KEYS),
+        ("single_boiler_idle", DIAGNOSTIC_KEYS | POWER_KEYS | SIMPLE_COMMAND_KEYS | GRIND_KEYS),
+        ("waiting_controller", DIAGNOSTIC_KEYS | POWER_KEYS | SIMPLE_COMMAND_KEYS | GRIND_KEYS),
         # cp and cd true -> puck/flow sensors; pkr/pf/tf present, wp absent (no process); db true -> steam;
         # htl and tlo true, hsl true and sbl false -> both Step 8 binary sensors
         (
             "dual_boiler_idle",
             DIAGNOSTIC_KEYS | DIAGNOSTIC_WARNING_KEYS | POWER_KEYS | PUCK_KEYS | STEAM_KEYS | TANK_STEAM_LEVEL_KEYS
-            | SIMPLE_COMMAND_KEYS | STEAM_HEATER_KEYS,
+            | SIMPLE_COMMAND_KEYS | STEAM_HEATER_KEYS | GRIND_KEYS | GRIND_BY_WEIGHT_KEYS,
         ),
     ],
 )

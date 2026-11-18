@@ -294,21 +294,23 @@ async def test_missing_mode_does_not_clear(
 async def test_disconnect_makes_unavailable_then_cleared_after_reconnect(
     hass: HomeAssistant, fake_gaggimate: FakeGaggiMate, setup_integration: SetupIntegration
 ) -> None:
-    coordinator = await setup_integration()
-    await _raise_pending(fake_gaggimate, coordinator, WARN_ERR)
-    await fake_gaggimate.drop_connections()
-    await wait_until(lambda: not coordinator.available)
-    await settle()
-    assert _pending(hass).state == UNAVAILABLE
-    assert coordinator.brew_confirm is None
-    assert _btn_state(hass, "brew_confirm") == UNAVAILABLE
-    assert _btn_state(hass, "brew_confirm_cancel") == UNAVAILABLE
-    await wait_until(lambda: coordinator.available)
-    await settle()
-    assert _pending(hass).state == "off"
-    assert _pending(hass).attributes["warnings"] == []
-    assert _btn_state(hass, "brew_confirm") == UNAVAILABLE
-    assert coordinator.brew_confirm is None
+    # The autouse fixture reconnects after 50 ms, which can elapse before the assertions on the
+    # unavailable state run (flaky under load). Use a delay long enough to observe that state.
+    with patch("custom_components.gaggimate.coordinator.WS_RECONNECT_DELAYS", [1.0]):
+        coordinator = await setup_integration()
+        await _raise_pending(fake_gaggimate, coordinator, WARN_ERR)
+        await fake_gaggimate.drop_connections()
+        await wait_until(lambda: not coordinator.available)
+        await settle()
+        assert _pending(hass).state == UNAVAILABLE
+        assert coordinator.brew_confirm is None
+        assert _btn_state(hass, "brew_confirm") == UNAVAILABLE
+        assert _btn_state(hass, "brew_confirm_cancel") == UNAVAILABLE
+        await wait_until(lambda: coordinator.available, timeout=8)
+        await wait_until(lambda: _pending(hass).state == "off")
+        assert _pending(hass).attributes["warnings"] == []
+        assert _btn_state(hass, "brew_confirm") == UNAVAILABLE
+        assert coordinator.brew_confirm is None
 
 
 async def test_availability_timeout_clears(

@@ -19,11 +19,14 @@ from .const import (
     HISTORY_INDEX_MAX_BYTES,
     HISTORY_INDEX_PATH,
     MSG_TYPE_BREW_CONFIRM_CANCEL,
+    MSG_TYPE_CHANGE_GRIND_TARGET,
     MSG_TYPE_EVENT_BREW_CONFIRM,
     MSG_TYPE_EVENT_BREW_CONFIRM_CANCEL,
     MSG_TYPE_EVENT_PREFIX,
     MSG_TYPE_FLUSH_START,
     MSG_TYPE_FLUSH_STOP,
+    MSG_TYPE_GRIND_ACTIVATE,
+    MSG_TYPE_GRIND_DEACTIVATE,
     MSG_TYPE_MODE_CHANGE,
     MSG_TYPE_OTA_SETTINGS,
     MSG_TYPE_OTA_SETTINGS_RESPONSE,
@@ -53,6 +56,20 @@ from .const import (
 from .history import parse_shot_index
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def int_flag(data: dict[str, Any], key: str) -> bool | None:
+    """Read a 1/0 status flag (bta, gt and gact are integers, not booleans); None when absent or not 0/1."""
+    value = data.get(key)
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    return None
+
+
+def other_process_running(data: dict[str, Any]) -> bool:
+    """True while a process other than the grind is active (a brew, flush, steam or water)."""
+    process = data.get("process")
+    return isinstance(process, dict) and process.get("a") == 1 and process.get("s") != "grind"
 
 
 def _ws_timeout(seconds: float) -> Any:
@@ -613,6 +630,50 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             # Includes cancellation: a toggle that was never sent must not count as applied
             self._steam_pending = None
             raise
+
+    async def activate_grind(self) -> None:
+        """Start the grinder (no response from the firmware).
+
+        Sent only while `gact` reports the grinder idle. Raises when the machine is not ready
+        (the firmware would drop the request silently) or while a brew runs (the firmware
+        would clear the running brew's scale source before refusing the start).
+        """
+        active = int_flag(self.data or {}, "gact")
+        if active is None:
+            raise UpdateFailed("Grind state unknown")
+        if active:
+            return
+        self._require_ready()
+        if other_process_running(self.data or {}):
+            raise UpdateFailed("Cannot start grinding while a brew is running")
+        await self.send_message({"tp": MSG_TYPE_GRIND_ACTIVATE})
+
+    async def deactivate_grind(self) -> None:
+        """Stop the grinder (no response from the firmware).
+
+        The firmware stops whatever process is running, so this is sent only while `gact`
+        reports a grind and no other process is active; otherwise a brew in progress would
+        be stopped.
+        """
+        active = int_flag(self.data or {}, "gact")
+        if active is None:
+            raise UpdateFailed("Grind state unknown")
+        if not active or other_process_running(self.data or {}):
+            return
+        await self.send_message({"tp": MSG_TYPE_GRIND_DEACTIVATE})
+
+    async def set_grind_by_weight(self, on: bool) -> None:
+        """Select the grind target type: by weight (on) or by time (off).
+
+        The firmware only stores the choice (no response). Sent only when `gt` differs.
+        """
+        by_weight = int_flag(self.data or {}, "gt")
+        if by_weight is None:
+            raise UpdateFailed("Grind target type unknown")
+        if by_weight == on:
+            return
+        # Firmware reads the target only as a JSON integer
+        await self.send_message({"tp": MSG_TYPE_CHANGE_GRIND_TARGET, "target": 1 if on else 0})
 
     async def request_profiles_list(self) -> None:
         try:
