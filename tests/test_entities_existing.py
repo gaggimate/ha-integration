@@ -48,7 +48,8 @@ TANK_STEAM_LEVEL_KEYS = {"tank_level_low", "steam_boiler_low"}
 
 # Step 9: Flush Stop and Clear Process always; Tare Scale only with hs true (no fixture has it);
 # Steam Heater switch only with db true.
-SIMPLE_COMMAND_KEYS = {"flush_stop", "process_clear"}
+# flush_stop/process_clear (step 9) and the always-on brew confirmation entities (step 10)
+SIMPLE_COMMAND_KEYS = {"flush_stop", "process_clear", "brew_confirm_pending", "brew_confirm", "brew_confirm_cancel"}
 STEAM_HEATER_KEYS = {"steam_heater"}
 
 # Disabled by default in the entity registry (entity_registry_enabled_default=False).
@@ -64,6 +65,9 @@ PLATFORM_OF = {
     "tare_scale": "button",
     "flush_stop": "button",
     "process_clear": "button",
+    "brew_confirm": "button",
+    "brew_confirm_cancel": "button",
+    "brew_confirm_pending": "binary_sensor",
     "steam_heater": "switch",
     "target_temperature_setpoint": "number",
     "controller_error": "binary_sensor",

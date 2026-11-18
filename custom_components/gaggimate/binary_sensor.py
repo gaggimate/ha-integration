@@ -18,6 +18,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
+    UNIQUE_ID_BREW_CONFIRM_PENDING,
     UNIQUE_ID_CONTROLLER_ERROR,
     UNIQUE_ID_STEAM_BOILER_LOW,
     UNIQUE_ID_TANK_LEVEL_LOW,
@@ -25,6 +26,7 @@ from .const import (
 )
 from .coordinator import GaggiMateCoordinator
 from .entity import GateFn, GaggiMateEntity, async_setup_gated, cap, has_key
+from .sensor import WARNING_SEVERITY
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -115,6 +117,26 @@ def _steam_boiler_low(data: dict[str, Any], _: GaggiMateCoordinator) -> bool | N
     return None if low is None else bool(low)
 
 
+def _brew_confirm_pending(_: dict[str, Any], coordinator: GaggiMateCoordinator) -> bool:
+    """On while the firmware waits for a brew start to be confirmed."""
+    return coordinator.brew_confirm is not None
+
+
+def _brew_confirm_attrs(_: dict[str, Any], coordinator: GaggiMateCoordinator) -> dict[str, Any]:
+    """The error-level warnings that blocked the brew start."""
+    warnings = []
+    for warning in coordinator.brew_confirm or []:
+        level = warning.get("l")
+        warnings.append(
+            {
+                "key": warning.get("k"),
+                "severity": WARNING_SEVERITY.get(level, "Unknown"),
+                "severity_level": level,
+            }
+        )
+    return {"warnings": warnings}
+
+
 def _has_reading(capability: str, key: str) -> GateFn:
     """Gate: the capability is true and the reading is not null (null means no reading)."""
     capable = cap(capability)
@@ -122,6 +144,13 @@ def _has_reading(capability: str, key: str) -> GateFn:
 
 
 BINARY_SENSORS: tuple[GaggiMateBinarySensorEntityDescription, ...] = (
+    GaggiMateBinarySensorEntityDescription(
+        key=UNIQUE_ID_BREW_CONFIRM_PENDING,
+        name="Brew Confirmation Pending",
+        icon="mdi:coffee-maker-outline",
+        value_fn=_brew_confirm_pending,
+        extra_attrs_fn=_brew_confirm_attrs,
+    ),
     GaggiMateBinarySensorEntityDescription(
         key=UNIQUE_ID_CONTROLLER_ERROR,
         name="Controller Error",

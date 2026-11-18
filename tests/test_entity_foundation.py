@@ -293,7 +293,8 @@ async def test_number_platform_unchanged_and_reload_no_duplicates(
     # default frames (single_boiler_idle): 34 existing + 9 step-5 diagnostics (no backflush/descaling in warn)
     # + 2 step-6 power sensors (heater_power, pump_power; no puck/flow/steam on a single boiler without cp/cd/db)
     # + 2 step-9 buttons (flush_stop, process_clear; no tare_scale as hs is false; no steam_heater without db)
-    assert total == 47
+    # + 3 step-10 always-on entities (brew_confirm_pending, brew_confirm, brew_confirm_cancel)
+    assert total == 50
 
     for _ in range(2):
         assert await hass.config_entries.async_reload(mock_config_entry.entry_id)

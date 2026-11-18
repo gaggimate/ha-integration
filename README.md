@@ -81,10 +81,32 @@ Entities that depend on a firmware key or capability are created once the machin
 |--------|-------------|--------------|
 | Controller Error | On when the controller reports an error code or an error/mismatch state (diagnostic) | Problem |
 | Update Available | On when a display or controller firmware update is available (diagnostic) | Update |
+| Brew Confirmation Pending | On while the machine waits for a brew start to be confirmed (see [Brew confirmation](#brew-confirmation)); attribute `warnings` lists the blocking warnings as `key`, `severity`, `severity_level` | - |
 | Tank Level Low | On when the tank sensor reports the tank as not OK; unknown without a reading. Only created where the machine reports a tank sensor: a tank switch, or a ToF tank sensor on dual-boiler machines (e.g. Alba) | Problem |
 | Steam Boiler Low | On when the steam boiler level sensor reports low water. Only created on dual-boiler machines with the steam level sensor enabled, once it reports a reading | Problem |
 
 **Tank and water level entities:** the Tank level sensor (%) is the level estimate. The Water Tank Low sensor (diagnostic) is the firmware warning: active whenever a ToF sensor reports below 20 %, with the warning's severity as an attribute; the severity setting decides whether an active warning asks for confirmation before brewing. Tank Level Low is the raw state of the tank sensor and is unknown without a reading. A tank switch alone produces no Water Tank Low warning, so Tank Level Low is the entity to use for it. Tank Level Low and Water Tank Low can only be compared where both exist. Steam Boiler Low is the raw steam level state and has no warning counterpart.
+
+### Brew confirmation
+
+A warning whose severity is set to *Error* on the machine does not block brewing outright: when you press **Start Brew** (or start from the display or web UI) in brew mode, the machine does not brew but asks for confirmation. Start Brew can therefore appear to do nothing while such a warning is active. Home Assistant shows the request as **Brew Confirmation Pending** (on, with the blocking warnings in the `warnings` attribute). Answer it with **Confirm Brew** (starts the brew, ignoring the warnings) or **Cancel Brew Confirmation**; Start Brew itself never overrides the warning.
+
+The pending state clears when the confirmation is cancelled (from any client), when a brew process starts, when the machine mode changes away from Brew, and when the connection to the machine is lost. Confirm Brew starts the brew only if the machine is ready.
+
+Example: notify when a brew is waiting for confirmation:
+
+```yaml
+trigger:
+  - platform: state
+    entity_id: binary_sensor.gaggimate_brew_confirmation_pending
+    to: "on"
+action:
+  - service: notify.mobile_app_phone
+    data:
+      message: "Brew blocked: {{ state_attr('binary_sensor.gaggimate_brew_confirmation_pending', 'warnings') | map(attribute='key') | join(', ') }}"
+```
+
+**Warning:** the confirmation is the machine's safety prompt for an error-level warning (for example an empty water tank). An automation that presses Confirm Brew blindly bypasses it; only automate it when you check the warnings first.
 
 ### Controls
 | Entity | Type | Description |
@@ -93,11 +115,13 @@ Entities that depend on a firmware key or capability are created once the machin
 | Mode | Select | Choose machine operating mode (dual-boiler machines offer Standby, Brew and Grind only) |
 | Profile | Select | Choose brewing profile |
 | Target Temperature Setpoint | Number | Set desired temperature (0–160 °C) |
-| Start Brew | Button | Begin brewing operation |
+| Start Brew | Button | Begin brewing operation. With an error-level warning active the machine asks for confirmation instead (see [Brew confirmation](#brew-confirmation)) |
 | Stop Brew | Button | Stop active process (brew or steam) |
 | Flush | Button | Trigger flush cycle |
 | Flush Stop | Button | Release a hold-to-flush (no effect during a fixed-length flush) |
 | Clear Process | Button | Clear the finished process state on the machine |
+| Confirm Brew | Button | Start the brew although an error-level warning is active. Available only while Brew Confirmation Pending is on |
+| Cancel Brew Confirmation | Button | Dismiss the pending brew confirmation. Available only while Brew Confirmation Pending is on |
 | Tare Scale | Button | Tare the hardware scale. Only created when the machine reports a hardware scale |
 | Steam Heater | Switch | Turn the steam boiler on/off. Dual-boiler machines only; turning on in standby is rejected, and turning off when already off is a silent no-op. The firmware only has a toggle, so a command is sent only when the state has to change; a change made at the same moment from the web UI or display can still be reversed |
 | Trim Shot History | Service | Remove oldest stored shots, keeping only a specified maximum |

@@ -18,6 +18,9 @@ from .const import (
     DOMAIN,
     HISTORY_INDEX_MAX_BYTES,
     HISTORY_INDEX_PATH,
+    MSG_TYPE_BREW_CONFIRM_CANCEL,
+    MSG_TYPE_EVENT_BREW_CONFIRM,
+    MSG_TYPE_EVENT_BREW_CONFIRM_CANCEL,
     MSG_TYPE_EVENT_PREFIX,
     MSG_TYPE_FLUSH_START,
     MSG_TYPE_FLUSH_STOP,
@@ -89,6 +92,8 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         self._ota_refresh_task: asyncio.Task | None = None
         # Last steam toggle sent: (requested state, monotonic time); see set_steam_heater
         self._steam_pending: tuple[bool, float] | None = None
+        # Pending brew confirmation: the warnings from evt:brew:confirm (None = nothing pending)
+        self._brew_confirm: list[dict[str, Any]] | None = None
 
         # NEW: Protect connection logic and shutdown state
         self._connect_lock = asyncio.Lock()
@@ -231,6 +236,8 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.error("WebSocket listen loop error: %s", err)
         finally:
+            # A confirmation cannot be answered over a dead link
+            self._clear_brew_confirm(notify=False)
             if self._available:
                 self._available = False
                 self.async_update_listeners()
@@ -266,7 +273,10 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                 # slow-changing state only when it changes (plus a full snapshot on connect).
                 # Merge onto the last known status; a key sent as null clears it.
                 previous = self.data or {}
-                self.async_set_updated_data({**previous, **message})
+                merged = {**previous, **message}
+                if self._brew_confirm is not None and self._brew_confirm_stale(merged):
+                    self._clear_brew_confirm(notify=False)  # the update below notifies
+                self.async_set_updated_data(merged)
                 # Update availability changed: the OTA settings (versions, update flags) are stale
                 if "up" in previous and "up" in message and previous["up"] != message["up"]:
                     self._schedule_ota_refresh()
@@ -280,6 +290,10 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                     future.set_result(message)
 
             if isinstance(msg_type, str) and msg_type.startswith(MSG_TYPE_EVENT_PREFIX):
+                if msg_type == MSG_TYPE_EVENT_BREW_CONFIRM:
+                    self._set_brew_confirm(message.get("warn"))
+                elif msg_type == MSG_TYPE_EVENT_BREW_CONFIRM_CANCEL:
+                    self._clear_brew_confirm()
                 self._dispatch_event(msg_type, message)
                 return
 
@@ -306,6 +320,36 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
         except json.JSONDecodeError as err:
             _LOGGER.error("Invalid WebSocket JSON: %s", err)
+
+    @property
+    def brew_confirm(self) -> list[dict[str, Any]] | None:
+        """Warnings of the pending brew confirmation, or None when nothing is pending."""
+        return self._brew_confirm
+
+    def _set_brew_confirm(self, warnings: Any) -> None:
+        """Record a brew start that the firmware blocked and wants confirmed."""
+        self._brew_confirm = [w for w in warnings if isinstance(w, dict)] if isinstance(warnings, list) else []
+        self.async_update_listeners()
+
+    def _clear_brew_confirm(self, notify: bool = True) -> None:
+        """Drop the pending confirmation; notify listeners only if one was pending."""
+        if self._brew_confirm is None:
+            return
+        self._brew_confirm = None
+        if notify:
+            self.async_update_listeners()
+
+    def _brew_confirm_stale(self, data: dict[str, Any]) -> bool:
+        """True when the status shows the confirmation was answered or is moot.
+
+        The firmware has no "confirmed" event: a confirmed start is only visible as
+        process.a == 1. Leaving brew mode also dismisses it (the firmware asks in brew mode only).
+        """
+        process = data.get("process")
+        if isinstance(process, dict) and process.get("a") == 1:
+            return True
+        mode = data.get("m")
+        return mode is not None and mode != MachineMode.BREW
 
     def _schedule_ota_refresh(self) -> None:
         """Re-read the OTA settings shortly after `up` changed (debounced: one pending refresh)."""
@@ -410,6 +454,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                 
                     self._last_status_time = None
                 
+                    self._clear_brew_confirm(notify=False)
                     if self._available:
                         self._available = False
                         self.async_set_updated_data({})
@@ -496,9 +541,21 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             await self.send_message({"tp": msg_type})
             await asyncio.sleep(0.05)
 
-    async def start_brew(self) -> None:
+    async def start_brew(self, ignore_warnings: bool = False) -> None:
+        """Start the brew; with ignore_warnings the firmware skips its error-warning prompt.
+
+        The flag is only sent when true (a plain start must not carry it). The firmware
+        does not reply: an error-level warning gives evt:brew:confirm instead of a start.
+        """
         self._require_ready()
-        await self.send_message({"tp": MSG_TYPE_PROCESS_ACTIVATE})
+        message: dict[str, Any] = {"tp": MSG_TYPE_PROCESS_ACTIVATE}
+        if ignore_warnings:
+            message["ignoreWarnings"] = True  # must be a JSON boolean
+        await self.send_message(message)
+
+    async def cancel_brew_confirm(self) -> None:
+        """Decline the pending confirmation; the state clears on evt:brew:confirm:cancel."""
+        await self.send_message({"tp": MSG_TYPE_BREW_CONFIRM_CANCEL})
 
     async def stop_brew(self) -> None:
         await self.send_message({"tp": MSG_TYPE_PROCESS_DEACTIVATE})

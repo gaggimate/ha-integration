@@ -13,6 +13,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
+    UNIQUE_ID_BREW_CONFIRM,
+    UNIQUE_ID_BREW_CONFIRM_CANCEL,
     UNIQUE_ID_BREW_START,
     UNIQUE_ID_BREW_STOP,
     UNIQUE_ID_FLUSH,
@@ -33,6 +35,7 @@ class GaggiMateButtonEntityDescription(ButtonEntityDescription):
 
     press_fn: Callable[[GaggiMateCoordinator], Awaitable[None]]
     supported_fn: Callable[[dict[str, Any]], bool] | None = None
+    available_fn: Callable[[GaggiMateCoordinator], bool] | None = None
 
 
 BUTTONS: tuple[GaggiMateButtonEntityDescription, ...] = (
@@ -56,6 +59,21 @@ BUTTONS: tuple[GaggiMateButtonEntityDescription, ...] = (
         name="Clear Process",
         icon="mdi:broom",
         press_fn=lambda coordinator: coordinator.clear_process(),
+    ),
+    GaggiMateButtonEntityDescription(
+        key=UNIQUE_ID_BREW_CONFIRM,
+        name="Confirm Brew",
+        icon="mdi:coffee-maker-check",
+        # Starts the brew although an error-level warning is active
+        press_fn=lambda coordinator: coordinator.start_brew(ignore_warnings=True),
+        available_fn=lambda coordinator: coordinator.brew_confirm is not None,
+    ),
+    GaggiMateButtonEntityDescription(
+        key=UNIQUE_ID_BREW_CONFIRM_CANCEL,
+        name="Cancel Brew Confirmation",
+        icon="mdi:coffee-maker-off",
+        press_fn=lambda coordinator: coordinator.cancel_brew_confirm(),
+        available_fn=lambda coordinator: coordinator.brew_confirm is not None,
     ),
 )
 
@@ -157,6 +175,14 @@ class GaggiMateButton(GaggiMateEntity, ButtonEntity):
         self.entity_description = description
         self._attr_unique_id = f"{coordinator.host}_{description.key}"
         self._attr_name = description.name
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available (some buttons only apply in certain states)."""
+        if not super().available:
+            return False
+        available_fn = self.entity_description.available_fn
+        return available_fn is None or available_fn(self.coordinator)
 
     async def async_press(self) -> None:
         """Handle the button press."""
