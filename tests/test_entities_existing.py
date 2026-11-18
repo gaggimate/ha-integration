@@ -35,8 +35,16 @@ DIAGNOSTIC_KEYS = {
 # Warning sensors (step 5) are gated on the key being present in `warn`.
 DIAGNOSTIC_WARNING_KEYS = {"warning_backflush", "warning_descaling"}
 
+# Step 6 power sensors: present whenever the telemetry frame carries hp / pw.
+POWER_KEYS = {"heater_power", "pump_power"}
+# Step 6 puck and flow sensors: gated on cp AND cd (target_flow on cd only). water_pumped also needs `wp`.
+PUCK_KEYS = {"puck_resistance", "puck_flow", "target_flow"}
+WATER_PUMPED_KEYS = {"water_pumped"}
+# Step 6 steam sensors: gated on db (dual boiler).
+STEAM_KEYS = {"steam_temperature", "target_steam_temperature"}
+
 # Disabled by default in the entity registry (entity_registry_enabled_default=False).
-DISABLED_BY_DEFAULT = {"link_rssi", "link_latency", "link_retransmits"}
+DISABLED_BY_DEFAULT = {"link_rssi", "link_latency", "link_retransmits", "puck_resistance", "target_flow"}
 
 PLATFORM_OF = {
     "power": "switch",
@@ -64,10 +72,15 @@ def _entity_id(hass: HomeAssistant, domain: str, key: str) -> str:
 @pytest.mark.parametrize(
     ("frames", "extra_keys"),
     [
-        # no backflush/descaling entry in `warn` -> those warning sensors are not created
-        ("single_boiler_idle", DIAGNOSTIC_KEYS),
-        ("waiting_controller", DIAGNOSTIC_KEYS),
-        ("dual_boiler_idle", DIAGNOSTIC_KEYS | DIAGNOSTIC_WARNING_KEYS),
+        # no backflush/descaling entry in `warn` -> those warning sensors are not created;
+        # cp/cd false and db false -> no puck, flow or steam sensors (heater/pump power always, from hp/pw)
+        ("single_boiler_idle", DIAGNOSTIC_KEYS | POWER_KEYS),
+        ("waiting_controller", DIAGNOSTIC_KEYS | POWER_KEYS),
+        # cp and cd true -> puck/flow sensors; pkr/pf/tf present, wp absent (no process); db true -> steam
+        (
+            "dual_boiler_idle",
+            DIAGNOSTIC_KEYS | DIAGNOSTIC_WARNING_KEYS | POWER_KEYS | PUCK_KEYS | STEAM_KEYS,
+        ),
     ],
 )
 async def test_all_current_entities_created(

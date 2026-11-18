@@ -40,6 +40,14 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Current Pressure | Live pressure reading from the machine | Pressure |
 | Target Pressure | Desired pressure target | Pressure |
 | Pump Flow | Current pump flow rate | - |
+| Heater Power | Heater duty cycle in % (0 in standby) | - |
+| Pump Power | Pump power in % | - |
+| Puck Resistance | Puck resistance in s*sqrt(bar)/mL; unknown outside 0-100 and unless the machine reports pressure and dimming (disabled by default) | - |
+| Puck Flow | Flow through the puck in mL/s; only on machines with pressure and dimming | - |
+| Target Flow | Target flow in mL/s during a process; unknown when 0 (disabled by default); only on machines with dimming | - |
+| Water Pumped | Water pumped during the current or last process in mL; appears after the first brew or process (the machine only reports it during/after a process); keeps its last value; only on machines with pressure and dimming | - |
+| Steam Temperature | Steam boiler temperature (dual-boiler machines only) | Temperature |
+| Target Steam Temperature | Steam boiler temperature target (dual-boiler machines only) | Temperature |
 | Mode | Active machine mode (Standby, Brew, Steam, Hot Water, Grind); dual-boiler machines report Brew for Steam/Hot Water | - |
 | Status | Derived machine status (Idle, Brewing, Steaming, Grinding, Pouring Water) | - |
 | Process Phase | Current process phase label from the machine (e.g. infusion, brew, finished) | - |

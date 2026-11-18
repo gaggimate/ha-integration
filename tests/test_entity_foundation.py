@@ -291,7 +291,8 @@ async def test_number_platform_unchanged_and_reload_no_duplicates(
     assert len(hass.states.async_entity_ids("number")) == 1
     total = len(er.async_entries_for_config_entry(registry, mock_config_entry.entry_id))
     # default frames (single_boiler_idle): 34 existing + 9 step-5 diagnostics (no backflush/descaling in warn)
-    assert total == 43
+    # + 2 step-6 power sensors (heater_power, pump_power; no puck/flow/steam on a single boiler without cp/cd/db)
+    assert total == 45
 
     for _ in range(2):
         assert await hass.config_entries.async_reload(mock_config_entry.entry_id)

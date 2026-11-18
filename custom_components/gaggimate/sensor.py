@@ -66,9 +66,17 @@ from .const import (
     UNIQUE_ID_LINK_RETRANSMITS,
     UNIQUE_ID_SCALE_BATTERY,
     UNIQUE_ID_SCALE_SOURCE,
+    UNIQUE_ID_HEATER_POWER,
+    UNIQUE_ID_PUMP_POWER,
+    UNIQUE_ID_PUCK_RESISTANCE,
+    UNIQUE_ID_PUCK_FLOW,
+    UNIQUE_ID_TARGET_FLOW,
+    UNIQUE_ID_WATER_PUMPED,
+    UNIQUE_ID_STEAM_TEMPERATURE,
+    UNIQUE_ID_TARGET_STEAM_TEMPERATURE,
 )
 from .coordinator import GaggiMateCoordinator
-from .entity import GaggiMateEntity, async_setup_gated, has_key, has_warning_key
+from .entity import GaggiMateEntity, async_setup_gated, cap, has_key, has_warning_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -364,6 +372,42 @@ def _get_link_latency(data: dict[str, Any]) -> int | None:
     if latency is None or latency < 0:
         return None
     return latency
+
+
+def _get_heater_power(data: dict[str, Any]) -> int | None:
+    """Heater duty cycle in %; the web UI shows 0 in standby."""
+    if data.get("m") == MachineMode.STANDBY:
+        return 0
+    return _to_int(data.get("hp"))
+
+
+def _get_puck_resistance(data: dict[str, Any]) -> float | None:
+    """Puck resistance is only valid inside (0, 100); the firmware sends 0 otherwise."""
+    resistance = _quantize(data.get("pkr"), 2)
+    if resistance is None or not 0 < resistance < 100:
+        return None
+    return resistance
+
+
+def _get_target_flow(data: dict[str, Any]) -> float | None:
+    """Target flow is 0 when no process is running."""
+    flow = _quantize(data.get("tf"), 1)
+    if not flow:
+        return None
+    return flow
+
+
+def _get_target_steam_temp(data: dict[str, Any]) -> float | None:
+    """Target steam temperature is 0 when the steam heater is off; that is not a reading."""
+    temperature = _quantize(data.get("tst"), 1)
+    if not temperature:
+        return None
+    return temperature
+
+
+def _puck_metrics_supported(data: dict[str, Any]) -> bool:
+    """The controller computes puck metrics only with pressure and dimming (cp and cd)."""
+    return cap("cp")(data) and cap("cd")(data)
 
 
 SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
@@ -717,5 +761,89 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         icon_fn=lambda data, _: _get_warning_icon(data, "descaling", "mdi:chemical-weapon"),
         extra_attrs_fn=lambda data, _: _get_warning_attrs(data, "descaling"),
         supported_fn=has_warning_key("descaling"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_HEATER_POWER,
+        name="Heater Power",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:fire",
+        suggested_display_precision=0,
+        value_fn=lambda data, _: _get_heater_power(data),
+        supported_fn=has_key("hp"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_PUMP_POWER,
+        name="Pump Power",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:water-pump",
+        suggested_display_precision=0,
+        value_fn=lambda data, _: _to_int(data.get("pw")),
+        supported_fn=has_key("pw"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_PUCK_RESISTANCE,
+        name="Puck Resistance",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="s*sqrt(bar)/mL",
+        icon="mdi:filter-variant",
+        entity_registry_enabled_default=False,
+        suggested_display_precision=2,
+        value_fn=lambda data, _: _get_puck_resistance(data),
+        supported_fn=lambda data: _puck_metrics_supported(data) and has_key("pkr")(data),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_PUCK_FLOW,
+        name="Puck Flow",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="mL/s",
+        icon="mdi:water-outline",
+        suggested_display_precision=1,
+        value_fn=lambda data, _: _quantize(data.get("pf"), 1),
+        supported_fn=_puck_metrics_supported,
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_TARGET_FLOW,
+        name="Target Flow",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="mL/s",
+        icon="mdi:target",
+        entity_registry_enabled_default=False,
+        suggested_display_precision=1,
+        value_fn=lambda data, _: _get_target_flow(data),
+        supported_fn=cap("cd"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_WATER_PUMPED,
+        name="Water Pumped",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="mL",
+        icon="mdi:water-plus",
+        suggested_display_precision=1,
+        value_fn=lambda data, _: _quantize(data.get("wp"), 1),
+        supported_fn=lambda data: _puck_metrics_supported(data) and has_key("wp")(data),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_STEAM_TEMPERATURE,
+        name="Steam Temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon="mdi:thermometer-water",
+        suggested_display_precision=1,
+        value_fn=lambda data, _: _quantize(data.get("cst"), 1),
+        supported_fn=cap("db"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_TARGET_STEAM_TEMPERATURE,
+        name="Target Steam Temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon="mdi:thermometer-auto",
+        suggested_display_precision=1,
+        value_fn=lambda data, _: _get_target_steam_temp(data),
+        supported_fn=cap("db"),
     ),
 )
