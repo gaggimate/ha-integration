@@ -81,6 +81,10 @@ Entities that depend on a firmware key or capability are created once the machin
 |--------|-------------|--------------|
 | Controller Error | On when the controller reports an error code or an error/mismatch state (diagnostic) | Problem |
 | Update Available | On when a display or controller firmware update is available (diagnostic) | Update |
+| Tank Level Low | On when the tank sensor reports the tank as not OK; unknown without a reading. Only created where the machine reports a tank sensor: a tank switch, or a ToF tank sensor on dual-boiler machines (e.g. Alba) | Problem |
+| Steam Boiler Low | On when the steam boiler level sensor reports low water. Only created on dual-boiler machines with the steam level sensor enabled, once it reports a reading | Problem |
+
+**Tank and water level entities:** the Tank level sensor (%) is the level estimate. The Water Tank Low sensor (diagnostic) is the firmware warning: active whenever a ToF sensor reports below 20 %, with the warning's severity as an attribute; the severity setting decides whether an active warning asks for confirmation before brewing. Tank Level Low is the raw state of the tank sensor and is unknown without a reading. A tank switch alone produces no Water Tank Low warning, so Tank Level Low is the entity to use for it. Tank Level Low and Water Tank Low can only be compared where both exist. Steam Boiler Low is the raw steam level state and has no warning counterpart.
 
 ### Controls
 | Entity | Type | Description |

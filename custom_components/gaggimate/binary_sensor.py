@@ -16,9 +16,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, UNIQUE_ID_CONTROLLER_ERROR, UNIQUE_ID_UPDATE_AVAILABLE
+from .const import (
+    DOMAIN,
+    UNIQUE_ID_CONTROLLER_ERROR,
+    UNIQUE_ID_STEAM_BOILER_LOW,
+    UNIQUE_ID_TANK_LEVEL_LOW,
+    UNIQUE_ID_UPDATE_AVAILABLE,
+)
 from .coordinator import GaggiMateCoordinator
-from .entity import GaggiMateEntity, async_setup_gated, has_key
+from .entity import GateFn, GaggiMateEntity, async_setup_gated, cap, has_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -97,6 +103,24 @@ def _update_available(data: dict[str, Any], _: GaggiMateCoordinator) -> bool | N
     return None if up is None else bool(up)
 
 
+def _tank_level_low(data: dict[str, Any], _: GaggiMateCoordinator) -> bool | None:
+    """On when the tank sensor reports the tank as not OK; unknown without a reading."""
+    tank_ok = data.get("tlo")
+    return None if tank_ok is None else not bool(tank_ok)
+
+
+def _steam_boiler_low(data: dict[str, Any], _: GaggiMateCoordinator) -> bool | None:
+    """On when the steam boiler level sensor reports low water; unknown without a reading."""
+    low = data.get("sbl")
+    return None if low is None else bool(low)
+
+
+def _has_reading(capability: str, key: str) -> GateFn:
+    """Gate: the capability is true and the reading is not null (null means no reading)."""
+    capable = cap(capability)
+    return lambda data: capable(data) and data.get(key) is not None
+
+
 BINARY_SENSORS: tuple[GaggiMateBinarySensorEntityDescription, ...] = (
     GaggiMateBinarySensorEntityDescription(
         key=UNIQUE_ID_CONTROLLER_ERROR,
@@ -113,5 +137,19 @@ BINARY_SENSORS: tuple[GaggiMateBinarySensorEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=_update_available,
         supported_fn=has_key("up"),
+    ),
+    GaggiMateBinarySensorEntityDescription(
+        key=UNIQUE_ID_TANK_LEVEL_LOW,
+        name="Tank Level Low",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        value_fn=_tank_level_low,
+        supported_fn=_has_reading("htl", "tlo"),
+    ),
+    GaggiMateBinarySensorEntityDescription(
+        key=UNIQUE_ID_STEAM_BOILER_LOW,
+        name="Steam Boiler Low",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        value_fn=_steam_boiler_low,
+        supported_fn=_has_reading("hsl", "sbl"),
     ),
 )

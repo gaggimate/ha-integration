@@ -117,6 +117,8 @@ UNIQUE_ID_TARGET_FLOW = "target_flow"
 UNIQUE_ID_WATER_PUMPED = "water_pumped"
 UNIQUE_ID_STEAM_TEMPERATURE = "steam_temperature"
 UNIQUE_ID_TARGET_STEAM_TEMPERATURE = "target_steam_temperature"
+UNIQUE_ID_TANK_LEVEL_LOW = "tank_level_low"
+UNIQUE_ID_STEAM_BOILER_LOW = "steam_boiler_low"
 
 # Services
 ATTR_MAX_SHOTS = "max_shots"

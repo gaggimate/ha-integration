@@ -1,0 +1,109 @@
+{
+  "synthetic": true,
+  "description": "Synthetic (not recorded). Based on dual_boiler_idle; steam_level-specific keys set for Step 8 tank/steam-level tests.",
+  "state": {
+    "tp": "evt:status",
+    "m": 1,
+    "p": "Default",
+    "puid": "default",
+    "sa": false,
+    "sca": true,
+    "cp": true,
+    "cd": true,
+    "gp": false,
+    "hs": false,
+    "scaleSource": "inactive",
+    "led": false,
+    "tofc": false,
+    "awl": false,
+    "sd": false,
+    "hl": false,
+    "htl": false,
+    "tlo": null,
+    "hsl": true,
+    "sbl": false,
+    "tw": 0,
+    "bta": 1,
+    "bt": 0,
+    "btd": 30000,
+    "gtd": 25000,
+    "gtv": 40.0,
+    "gt": 0,
+    "gact": 0,
+    "up": false,
+    "sys": {
+      "s": "ready",
+      "m": "",
+      "c": 0
+    },
+    "bc": false,
+    "sbat": null,
+    "warn": [
+      {
+        "k": "water",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "temperature",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "switch",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "flush",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "scaleConnected",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "scaleBattery",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "backflush",
+        "l": 1,
+        "a": false
+      },
+      {
+        "k": "descaling",
+        "l": 1,
+        "a": false
+      }
+    ]
+  },
+  "telemetry": {
+    "tp": "evt:status",
+    "ct": 93.4,
+    "cst": 125.3,
+    "tst": 145,
+    "db": true,
+    "tt": 93,
+    "pr": 0.02,
+    "fl": 0,
+    "pt": 0,
+    "wl": 100,
+    "tof": 0,
+    "lat": -1,
+    "pw": 0,
+    "hp": 12.5,
+    "lnk": "uart",
+    "rssi": 0,
+    "rtx": 0,
+    "bw": 0,
+    "cw": 0,
+    "process": null,
+    "pkr": 0,
+    "pf": 0,
+    "tf": 0
+  }
+}
