@@ -1,4 +1,5 @@
 # Test dependencies. PHACC pins the Home Assistant version used by the tests and
-# requires Python >= 3.14 (see .github/workflows/tests.yaml). Runs on Linux/WSL only.
+# requires Python >= 3.14 (see .github/workflows/tests.yaml). Linux/WSL is the official route;
+# a scripted native-Windows route exists (scripts/run_tests.ps1, see README).
 pytest-homeassistant-custom-component==0.13.375
 pytest-xdist  # pytest.ini addopts use -n; also a PHACC dependency, listed explicitly

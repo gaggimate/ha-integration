@@ -621,7 +621,7 @@ An example Home Assistant dashboard is available in the [`examples/dashboard`](e
 
 ## Development / Running Tests
 
-The test suite uses [pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component) (PHACC), pinned in `requirements_test.txt`. PHACC requires **Python 3.14** and does not support native Windows, so run the tests on Linux or WSL. CI runs them on Ubuntu with Python 3.14 (`.github/workflows/tests.yaml`).
+The test suite uses [pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component) (PHACC), pinned in `requirements_test.txt`. PHACC requires **Python 3.14** and does not officially support native Windows, so the recommended route is Linux or WSL (a scripted native-Windows route is described below). CI runs them on Ubuntu with Python 3.14 (`.github/workflows/tests.yaml`).
 
 **Windows (WSL + uv)**
 
@@ -638,6 +638,20 @@ The test suite uses [pytest-homeassistant-custom-component](https://github.com/M
    uv pip install -r requirements_test.txt
    pytest
    ```
+
+**Windows (native, scripted)**
+
+Without WSL you can run the suite natively with the helper scripts (PowerShell, no admin rights needed):
+
+```powershell
+scripts\run_tests.ps1                                    # whole suite
+scripts\run_tests.ps1 tests/test_current_weight.py -q    # extra arguments go to pytest verbatim
+scripts\run_tests.ps1 -Root D:\envs\ha-tests -k "weight"  # -Root, if used, must come first
+```
+
+`scripts\run_tests.ps1` calls `scripts\setup_test_env.ps1` on first use and again whenever `requirements_test.txt` changes. It uses a recent [uv](https://docs.astral.sh/uv/) (a private copy is installed under the root if the one on `PATH` is too old), fetches Python 3.14.2 or newer, creates a virtualenv in `%LOCALAPPDATA%\gaggimate-ha-tests\venv` (override with `-Root <dir>`) and installs `requirements_test.txt`. Re-running it is safe. Everything lives under the root, except uv's own managed-Python cache (`%APPDATA%\uv\python`); no PATH shims or registry entries are created. The script refuses a root that is a drive root, your user profile, or the repository (or a parent of it), and only recreates a virtualenv that carries its marker file (`<root>\.gaggimate-ha-tests`). To reset, delete the root folder.
+
+Home Assistant imports the POSIX-only modules `fcntl` and `resource`, so the setup script writes tiny stub versions of them into that virtualenv only; two further Windows shims live in `tests/conftest.py`. These are test-only workarounds and are not part of the integration. WSL/Linux (above) is the official route and what CI uses.
 
 **Linux / macOS**
 
