@@ -19,6 +19,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, UNIQUE_ID_TARGET_TEMP_SETPOINT
 from .coordinator import GaggiMateCoordinator
+from .entity import async_setup_gated
 from .sensor import GaggiMateEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class GaggiMateNumberEntityDescription(NumberEntityDescription):
 
     value_fn: Callable[[dict[str, Any], GaggiMateCoordinator], float | None]
     set_value_fn: Callable[[GaggiMateCoordinator, float], Awaitable[None]]
+    supported_fn: Callable[[dict[str, Any]], bool] | None = None
 
 
 SENSORS: tuple[GaggiMateNumberEntityDescription, ...] = (
@@ -60,9 +62,7 @@ async def async_setup_entry(
     """Set up GaggiMate number entities."""
     coordinator: GaggiMateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    async_add_entities(
-        GaggiMateNumber(coordinator, entry, description) for description in SENSORS
-    )
+    async_setup_gated(coordinator, entry, async_add_entities, SENSORS, GaggiMateNumber)
 
 
 class GaggiMateNumber(GaggiMateEntity, NumberEntity):

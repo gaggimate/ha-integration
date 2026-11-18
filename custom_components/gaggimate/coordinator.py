@@ -6,17 +6,19 @@ import json
 import logging
 import uuid
 import time
+from collections.abc import Callable
 from typing import Any
 from contextlib import suppress
 
 import aiohttp
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
     DOMAIN,
     HISTORY_INDEX_MAX_BYTES,
     HISTORY_INDEX_PATH,
+    MSG_TYPE_EVENT_PREFIX,
     MSG_TYPE_FLUSH_START,
     MSG_TYPE_MODE_CHANGE,
     MSG_TYPE_OTA_SETTINGS,
@@ -77,6 +79,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         self._pending_requests: dict[str, asyncio.Future] = {}
         self._profiles: dict[str, str] = {}
         self._ota_settings: dict[str, Any] = {}
+        self._event_listeners: list[Callable[[str, dict[str, Any]], None]] = []
 
         # NEW: Protect connection logic and shutdown state
         self._connect_lock = asyncio.Lock()
@@ -111,6 +114,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
     async def async_shutdown(self) -> None:
         """Shutdown the coordinator cleanly."""
         self._shutting_down = True
+        self._event_listeners.clear()
 
         if self._availability_check_task:
             self._availability_check_task.cancel()
@@ -256,6 +260,10 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                 if not future.done():
                     future.set_result(message)
 
+            if isinstance(msg_type, str) and msg_type.startswith(MSG_TYPE_EVENT_PREFIX):
+                self._dispatch_event(msg_type, message)
+                return
+
             if msg_type == MSG_TYPE_OTA_SETTINGS_RESPONSE:
                 self._ota_settings = message
                 self.async_update_listeners()
@@ -279,6 +287,31 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
         except json.JSONDecodeError as err:
             _LOGGER.error("Invalid WebSocket JSON: %s", err)
+
+    @callback
+    def async_add_event_listener(
+        self, listener: Callable[[str, dict[str, Any]], None]
+    ) -> Callable[[], None]:
+        """Register a listener for non-status ``evt:*`` messages; returns an unsubscribe.
+
+        Listeners receive the shared message dict and must not mutate it.
+        """
+        self._event_listeners.append(listener)
+
+        @callback
+        def _remove() -> None:
+            with suppress(ValueError):
+                self._event_listeners.remove(listener)
+
+        return _remove
+
+    def _dispatch_event(self, msg_type: str, message: dict[str, Any]) -> None:
+        """Pass an event message to all listeners; one failing listener does not stop the rest."""
+        for listener in list(self._event_listeners):
+            try:
+                listener(msg_type, message)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Error in event listener for %s", msg_type)
 
     async def _schedule_reconnect(self) -> None:
         """Ensure a reconnect loop is running."""

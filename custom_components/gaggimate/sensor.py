@@ -17,7 +17,6 @@ from homeassistant.const import UnitOfMass, UnitOfPressure, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
@@ -53,8 +52,12 @@ from .const import (
     UNIQUE_ID_WARNING_SCALE_BATTERY,
 )
 from .coordinator import GaggiMateCoordinator
+from .entity import GaggiMateEntity, async_setup_gated
 
 _LOGGER = logging.getLogger(__name__)
+
+# GaggiMateEntity is re-exported: other platforms import it from here
+__all__ = ["GaggiMateEntity", "GaggiMateSensor", "GaggiMateSensorEntityDescription", "SENSORS"]
 
 PARALLEL_UPDATES = 1
 
@@ -67,6 +70,7 @@ class GaggiMateSensorEntityDescription(SensorEntityDescription):
     available_fn: Callable[[dict[str, Any], GaggiMateCoordinator], bool] | None = None
     icon_fn: Callable[[dict[str, Any], GaggiMateCoordinator], str] | None = None
     extra_attrs_fn: Callable[[dict[str, Any], GaggiMateCoordinator], dict[str, Any]] | None = None
+    supported_fn: Callable[[dict[str, Any]], bool] | None = None
 
 
 async def async_setup_entry(
@@ -77,40 +81,7 @@ async def async_setup_entry(
     """Set up GaggiMate sensors."""
     coordinator: GaggiMateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    async_add_entities(
-        GaggiMateSensor(coordinator, entry, description) for description in SENSORS
-    )
-
-
-class GaggiMateEntity(CoordinatorEntity[GaggiMateCoordinator]):
-    """Base class for GaggiMate entities."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator: GaggiMateCoordinator, entry: ConfigEntry) -> None:
-        """Initialize the entity."""
-        super().__init__(coordinator)
-        self._entry = entry
-        self._device_name = entry.title or f"GaggiMate {self.coordinator.host}"
-
-    @property
-    def device_info(self):
-        """Return device information."""
-        return {
-            "identifiers": {(DOMAIN, self.coordinator.host)},
-            "name": self._device_name,
-            "manufacturer": "GaggiMate",
-            "model": "GaggiMate",
-            "configuration_url": f"http://{self.coordinator.host}:{self.coordinator.port}",
-        }
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return (
-            self.coordinator.available
-            and self.coordinator.data is not None
-        )
+    async_setup_gated(coordinator, entry, async_add_entities, SENSORS, GaggiMateSensor)
 
 
 class GaggiMateSensor(GaggiMateEntity, SensorEntity):

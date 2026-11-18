@@ -19,6 +19,7 @@ WS_UNAVAILABLE_TIMEOUT = 15  # seconds - mark unavailable if no status for 15 se
 
 # Message types
 MSG_TYPE_STATUS = "evt:status"
+MSG_TYPE_EVENT_PREFIX = "evt:"
 MSG_TYPE_MODE_CHANGE = "req:change-mode"
 MSG_TYPE_PROCESS_ACTIVATE = "req:process:activate"
 MSG_TYPE_PROCESS_DEACTIVATE = "req:process:deactivate"
