@@ -153,6 +153,46 @@ Start Backflush and Start Descaling select the machine's cleaning profile and st
 
 Start Backflush and Start Descaling fail with an error while the machine is not ready or a brew is running, and when the machine cannot select the cleaning profile.
 
+### Events
+
+Two event entities report things the machine announces once. They have no state history: each event carries a type and attributes, and you trigger automations on them.
+
+| Entity | Event type | Attributes |
+|---|---|---|
+| Shot Events | `shot_saved` | `shot_id` (integer) |
+| Shot Events | `shot_finished` | `max_pressure_bar`, `avg_flow_ml_s` (floats) |
+| Machine Events | `scale_disconnected` | `name`, `address` |
+| Machine Events | `autotune_result` | `pid` (string) |
+| Machine Events | `autotune_failed` | none |
+
+An attribute the machine did not send, or sent in an unexpected form, is `null`.
+
+Events that the machine emits while Home Assistant is not connected are lost. They are not replayed after a reconnect, and the entities are unavailable while the machine is.
+
+Example: notify when a shot finishes.
+
+```yaml
+automation:
+  - alias: "Shot finished"
+    trigger:
+      - platform: state
+        entity_id: event.gaggimate_shot_events
+    condition:
+      - condition: template
+        value_template: "{{ trigger.from_state is not none and trigger.from_state.state not in ['unavailable', 'unknown'] }}"
+      - condition: template
+        value_template: "{{ trigger.to_state.attributes.event_type == 'shot_finished' }}"
+    action:
+      - service: notify.notify
+        data:
+          message: >
+            Shot done. Max pressure
+            {{ trigger.to_state.attributes.max_pressure_bar | round(1) }} bar,
+            average flow {{ trigger.to_state.attributes.avg_flow_ml_s | round(1) }} mL/s.
+```
+
+The trigger watches the entity's state (the time of the last event) and the condition picks the event type, so consecutive events of the same type each fire. The first condition skips the change when the entity is first created or returns from `unavailable` after a reconnect or restart: Home Assistant then restores the last event, which would otherwise notify again. Adjust the entity id to match yours. Use `max_pressure_bar | default(0, true)` if you want to tolerate a `null` value.
+
 ## Installation
 
 ### HACS (Recommended)

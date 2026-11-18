@@ -169,6 +169,8 @@ UNIQUE_ID_BACKFLUSH_START = "backflush_start"
 UNIQUE_ID_BACKFLUSH_COMPLETE = "backflush_complete"
 UNIQUE_ID_DESCALING_START = "descaling_start"
 UNIQUE_ID_DESCALING_COMPLETE = "descaling_complete"
+UNIQUE_ID_SHOT_EVENTS = "shot_events"
+UNIQUE_ID_MACHINE_EVENTS = "machine_events"
 
 # Services
 ATTR_MAX_SHOTS = "max_shots"

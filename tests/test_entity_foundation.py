@@ -299,7 +299,8 @@ async def test_number_platform_unchanged_and_reload_no_duplicates(
     # + 3 step-10 always-on entities (brew_confirm_pending, brew_confirm, brew_confirm_cancel)
     # + 1 step-11 Grind switch (gact present; no Grind By Weight as bta is 0)
     # + 1 step-12 Grind Target Duration number (gtd present; no Grind Target Weight as bta is 0)
-    assert total == 52
+    # + 2 step-14 always-on event entities (shot_events, machine_events)
+    assert total == 54
 
     for _ in range(2):
         assert await hass.config_entries.async_reload(mock_config_entry.entry_id)
