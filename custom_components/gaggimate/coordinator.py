@@ -32,6 +32,7 @@ from .const import (
     MSG_TYPE_TEMP_LOWER,
     MSG_TYPE_TEMP_RAISE,
     MachineMode,
+    OTA_REFRESH_DELAY,
     MSG_TYPE_HISTORY_DELETE,
     MSG_TYPE_HISTORY_LIST,
     MSG_TYPE_HISTORY_NOTES_GET,
@@ -80,6 +81,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         self._profiles: dict[str, str] = {}
         self._ota_settings: dict[str, Any] = {}
         self._event_listeners: list[Callable[[str, dict[str, Any]], None]] = []
+        self._ota_refresh_task: asyncio.Task | None = None
 
         # NEW: Protect connection logic and shutdown state
         self._connect_lock = asyncio.Lock()
@@ -115,6 +117,12 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         """Shutdown the coordinator cleanly."""
         self._shutting_down = True
         self._event_listeners.clear()
+
+        if self._ota_refresh_task:
+            self._ota_refresh_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await self._ota_refresh_task
+            self._ota_refresh_task = None
 
         if self._availability_check_task:
             self._availability_check_task.cancel()
@@ -250,7 +258,11 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                 # Firmware sends partial status frames: fast telemetry every tick and the
                 # slow-changing state only when it changes (plus a full snapshot on connect).
                 # Merge onto the last known status; a key sent as null clears it.
-                self.async_set_updated_data({**(self.data or {}), **message})
+                previous = self.data or {}
+                self.async_set_updated_data({**previous, **message})
+                # Update availability changed: the OTA settings (versions, update flags) are stale
+                if "up" in previous and "up" in message and previous["up"] != message["up"]:
+                    self._schedule_ota_refresh()
                 return
 
             # Resolve the pending request first, for every response type
@@ -287,6 +299,20 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
         except json.JSONDecodeError as err:
             _LOGGER.error("Invalid WebSocket JSON: %s", err)
+
+    def _schedule_ota_refresh(self) -> None:
+        """Re-read the OTA settings shortly after `up` changed (debounced: one pending refresh)."""
+        if self._shutting_down:
+            return
+        if self._ota_refresh_task and not self._ota_refresh_task.done():
+            return
+        self._ota_refresh_task = self.hass.async_create_background_task(
+            self._refresh_ota_settings(), f"{DOMAIN}_ota_refresh"
+        )
+
+    async def _refresh_ota_settings(self) -> None:
+        await asyncio.sleep(OTA_REFRESH_DELAY)
+        await self.request_ota_settings()
 
     @callback
     def async_add_event_listener(

@@ -26,7 +26,17 @@ EXPECTED_KEYS = {
     "power", "mode_select", "profile_select", "brew_start", "brew_stop", "flush",
     "target_temperature_setpoint",
 }
-EXPECTED_UNIQUE_IDS = {f"{HOST}_{key}" for key in EXPECTED_KEYS}
+
+# Step 5 diagnostics. Present whenever the firmware sends the key (sys, lnk, lat, rtx, up, sbat, scaleSource).
+DIAGNOSTIC_KEYS = {
+    "system_state", "controller_error", "link_type", "link_rssi", "link_latency", "link_retransmits",
+    "update_available", "scale_battery", "scale_source",
+}
+# Warning sensors (step 5) are gated on the key being present in `warn`.
+DIAGNOSTIC_WARNING_KEYS = {"warning_backflush", "warning_descaling"}
+
+# Disabled by default in the entity registry (entity_registry_enabled_default=False).
+DISABLED_BY_DEFAULT = {"link_rssi", "link_latency", "link_retransmits"}
 
 PLATFORM_OF = {
     "power": "switch",
@@ -36,6 +46,8 @@ PLATFORM_OF = {
     "brew_stop": "button",
     "flush": "button",
     "target_temperature_setpoint": "number",
+    "controller_error": "binary_sensor",
+    "update_available": "binary_sensor",
 }
 
 
@@ -49,13 +61,22 @@ def _entity_id(hass: HomeAssistant, domain: str, key: str) -> str:
     return entity_id
 
 
-@pytest.mark.parametrize("frames", ["single_boiler_idle", "dual_boiler_idle", "waiting_controller"])
+@pytest.mark.parametrize(
+    ("frames", "extra_keys"),
+    [
+        # no backflush/descaling entry in `warn` -> those warning sensors are not created
+        ("single_boiler_idle", DIAGNOSTIC_KEYS),
+        ("waiting_controller", DIAGNOSTIC_KEYS),
+        ("dual_boiler_idle", DIAGNOSTIC_KEYS | DIAGNOSTIC_WARNING_KEYS),
+    ],
+)
 async def test_all_current_entities_created(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     fake_gaggimate: FakeGaggiMate,
     setup_integration: SetupIntegration,
     frames: str,
+    extra_keys: set[str],
 ) -> None:
     """Existing entities are created unconditionally with the documented unique_ids."""
     # the server starts with the default frame set; swap in the parametrized one before connecting
@@ -63,14 +84,19 @@ async def test_all_current_entities_created(
     fake_gaggimate.state, fake_gaggimate.telemetry = data["state"], data["telemetry"]
     await setup_integration()
 
+    expected_keys = EXPECTED_KEYS | extra_keys
+    expected_unique_ids = {f"{HOST}_{key}" for key in expected_keys}
     entities = _entry_entities(hass, mock_config_entry)
-    assert {e.unique_id for e in entities} == EXPECTED_UNIQUE_IDS
-    assert len(entities) == len(EXPECTED_KEYS) == 34
+    assert {e.unique_id for e in entities} == expected_unique_ids
+    assert len(entities) == len(expected_keys)
     for entity in entities:
         key = entity.unique_id.removeprefix(f"{HOST}_")
         assert entity.domain == PLATFORM_OF.get(key, "sensor")
         assert entity.platform == "gaggimate"
-        assert entity.disabled_by is None
+        if key in DISABLED_BY_DEFAULT:
+            assert entity.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        else:
+            assert entity.disabled_by is None
     # entities hang off one device identified by the host
     device_ids = {e.device_id for e in entities}
     assert len(device_ids) == 1

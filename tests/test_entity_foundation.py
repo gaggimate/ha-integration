@@ -290,7 +290,8 @@ async def test_number_platform_unchanged_and_reload_no_duplicates(
     assert numbers() == ["127.0.0.1_target_temperature_setpoint"]
     assert len(hass.states.async_entity_ids("number")) == 1
     total = len(er.async_entries_for_config_entry(registry, mock_config_entry.entry_id))
-    assert total == 34
+    # default frames (single_boiler_idle): 34 existing + 9 step-5 diagnostics (no backflush/descaling in warn)
+    assert total == 43
 
     for _ in range(2):
         assert await hass.config_entries.async_reload(mock_config_entry.entry_id)
@@ -300,8 +301,13 @@ async def test_number_platform_unchanged_and_reload_no_duplicates(
         await settle()
         assert numbers() == ["127.0.0.1_target_temperature_setpoint"]
         assert len(hass.states.async_entity_ids("number")) == 1
+        # disabled-by-default entities are registered but have no state
         assert len(hass.states.async_entity_ids("sensor")) == len(
-            [e for e in er.async_entries_for_config_entry(registry, mock_config_entry.entry_id) if e.domain == "sensor"]
+            [
+                e
+                for e in er.async_entries_for_config_entry(registry, mock_config_entry.entry_id)
+                if e.domain == "sensor" and e.disabled_by is None
+            ]
         )
         assert len(er.async_entries_for_config_entry(registry, mock_config_entry.entry_id)) == total
         # the new coordinator holds a bounded number of listeners (no accumulation across reloads)

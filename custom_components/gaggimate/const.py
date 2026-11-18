@@ -16,6 +16,7 @@ WS_REQUEST_TIMEOUT = 30  # seconds
 HISTORY_INDEX_PATH = "/api/history/index.bin"
 HISTORY_INDEX_MAX_BYTES = 2 * 1024 * 1024  # size cap for the shot index download
 WS_UNAVAILABLE_TIMEOUT = 15  # seconds - mark unavailable if no status for 15 seconds
+OTA_REFRESH_DELAY = 2  # seconds - debounce for re-reading OTA settings after `up` changes
 
 # Message types
 MSG_TYPE_STATUS = "evt:status"
@@ -97,6 +98,17 @@ UNIQUE_ID_WARNING_SWITCH = "warning_switch"
 UNIQUE_ID_WARNING_FLUSH = "warning_flush"
 UNIQUE_ID_WARNING_SCALE_CONNECTED = "warning_scale_connected"
 UNIQUE_ID_WARNING_SCALE_BATTERY = "warning_scale_battery"
+UNIQUE_ID_SYSTEM_STATE = "system_state"
+UNIQUE_ID_CONTROLLER_ERROR = "controller_error"
+UNIQUE_ID_LINK_TYPE = "link_type"
+UNIQUE_ID_LINK_RSSI = "link_rssi"
+UNIQUE_ID_LINK_LATENCY = "link_latency"
+UNIQUE_ID_LINK_RETRANSMITS = "link_retransmits"
+UNIQUE_ID_UPDATE_AVAILABLE = "update_available"
+UNIQUE_ID_SCALE_BATTERY = "scale_battery"
+UNIQUE_ID_SCALE_SOURCE = "scale_source"
+UNIQUE_ID_WARNING_BACKFLUSH = "warning_backflush"
+UNIQUE_ID_WARNING_DESCALING = "warning_descaling"
 
 # Services
 ATTR_MAX_SHOTS = "max_shots"

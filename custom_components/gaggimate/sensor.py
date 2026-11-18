@@ -13,7 +13,14 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfMass, UnitOfPressure, UnitOfTemperature
+from homeassistant.const import (
+    PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    UnitOfMass,
+    UnitOfPressure,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -50,9 +57,18 @@ from .const import (
     UNIQUE_ID_WARNING_FLUSH,
     UNIQUE_ID_WARNING_SCALE_CONNECTED,
     UNIQUE_ID_WARNING_SCALE_BATTERY,
+    UNIQUE_ID_WARNING_BACKFLUSH,
+    UNIQUE_ID_WARNING_DESCALING,
+    UNIQUE_ID_SYSTEM_STATE,
+    UNIQUE_ID_LINK_TYPE,
+    UNIQUE_ID_LINK_RSSI,
+    UNIQUE_ID_LINK_LATENCY,
+    UNIQUE_ID_LINK_RETRANSMITS,
+    UNIQUE_ID_SCALE_BATTERY,
+    UNIQUE_ID_SCALE_SOURCE,
 )
 from .coordinator import GaggiMateCoordinator
-from .entity import GaggiMateEntity, async_setup_gated
+from .entity import GaggiMateEntity, async_setup_gated, has_key, has_warning_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -288,6 +304,67 @@ def _get_warning_icon(
         return "mdi:alert-circle"
 
     return "mdi:alert"
+
+
+SYSTEM_STATES = ["starting", "waiting", "ready", "updating", "autotuning", "mismatch", "error"]
+LINK_TYPES = ["ble", "uart", "none"]
+SCALE_SOURCES = ["hardware", "bluetooth", "estimation", "inactive"]
+
+
+_logged_unknown: set[tuple[str, str]] = set()
+
+
+def _enum_value(value: Any, options: list[str], what: str) -> str | None:
+    """Return value if it is a declared enum option; unknown values give None (debug-logged once)."""
+    if value is None:
+        return None
+    if isinstance(value, str) and value in options:
+        return value
+    marker = (what, repr(value))
+    if marker not in _logged_unknown:
+        _logged_unknown.add(marker)
+        _LOGGER.debug("Unknown %s value from firmware: %r", what, value)
+    return None
+
+
+def _to_int(value: Any) -> int | None:
+    """Round numeric values to an integer; None on invalid input."""
+    number = _quantize(value, 0)
+    return None if number is None else int(number)
+
+
+def _get_sys(data: dict[str, Any]) -> dict[str, Any]:
+    """Return the system-state object (empty when absent or malformed)."""
+    sys_state = data.get("sys")
+    return sys_state if isinstance(sys_state, dict) else {}
+
+
+def _get_system_state_attrs(data: dict[str, Any], _: GaggiMateCoordinator) -> dict[str, Any]:
+    """Return the controller message and error code."""
+    sys_state = _get_sys(data)
+    attrs: dict[str, Any] = {}
+    if sys_state.get("m") is not None:
+        attrs["message"] = sys_state["m"]
+    if sys_state.get("c") is not None:
+        attrs["error_code"] = sys_state["c"]
+    return attrs
+
+
+def _get_link_rssi(data: dict[str, Any]) -> int | None:
+    """RSSI is only meaningful on a BLE link (the firmware reports 0 otherwise)."""
+    rssi = data.get("rssi")
+    if data.get("lnk") != "ble" or not rssi:
+        return None
+    return _to_int(rssi)
+
+
+def _get_link_latency(data: dict[str, Any]) -> int | None:
+    """Latency is -1 until measured."""
+    latency = _to_int(data.get("lat"))
+    if latency is None or latency < 0:
+        return None
+    return latency
+
 
 SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
     GaggiMateSensorEntityDescription(
@@ -548,5 +625,97 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         extra_attrs_fn=lambda data, _: _get_warning_attrs(
             data, "scaleBattery"
         ),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_SYSTEM_STATE,
+        name="System State",
+        device_class=SensorDeviceClass.ENUM,
+        options=SYSTEM_STATES,
+        icon="mdi:state-machine",
+        value_fn=lambda data, _: _enum_value(_get_sys(data).get("s"), SYSTEM_STATES, "system state"),
+        extra_attrs_fn=_get_system_state_attrs,
+        supported_fn=has_key("sys"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_LINK_TYPE,
+        name="Controller Link",
+        device_class=SensorDeviceClass.ENUM,
+        options=LINK_TYPES,
+        icon="mdi:link-variant",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data, _: _enum_value(data.get("lnk"), LINK_TYPES, "link type"),
+        supported_fn=has_key("lnk"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_LINK_RSSI,
+        name="Controller Link RSSI",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda data, _: _get_link_rssi(data),
+        supported_fn=has_key("lnk"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_LINK_LATENCY,
+        name="Controller Link Latency",
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTime.MILLISECONDS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda data, _: _get_link_latency(data),
+        supported_fn=has_key("lat"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_LINK_RETRANSMITS,
+        name="Controller Link Retransmits",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:repeat",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda data, _: _to_int(data.get("rtx")),
+        supported_fn=has_key("rtx"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_SCALE_BATTERY,
+        name="Scale Battery",
+        device_class=SensorDeviceClass.BATTERY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data, _: _to_int(data.get("sbat")),
+        supported_fn=has_key("sbat"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_SCALE_SOURCE,
+        name="Active Scale Source",
+        device_class=SensorDeviceClass.ENUM,
+        options=SCALE_SOURCES,
+        icon="mdi:scale",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data, _: _enum_value(data.get("scaleSource"), SCALE_SOURCES, "scale source"),
+        supported_fn=has_key("scaleSource"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_WARNING_BACKFLUSH,
+        name="Backflush Due",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:water-sync",
+        value_fn=lambda data, _: _get_warning_state(data, "backflush"),
+        icon_fn=lambda data, _: _get_warning_icon(data, "backflush", "mdi:water-sync"),
+        extra_attrs_fn=lambda data, _: _get_warning_attrs(data, "backflush"),
+        supported_fn=has_warning_key("backflush"),
+    ),
+    GaggiMateSensorEntityDescription(
+        key=UNIQUE_ID_WARNING_DESCALING,
+        name="Descaling Due",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:chemical-weapon",
+        value_fn=lambda data, _: _get_warning_state(data, "descaling"),
+        icon_fn=lambda data, _: _get_warning_icon(data, "descaling", "mdi:chemical-weapon"),
+        extra_attrs_fn=lambda data, _: _get_warning_attrs(data, "descaling"),
+        supported_fn=has_warning_key("descaling"),
     ),
 )

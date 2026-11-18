@@ -54,6 +54,25 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 | Display Update Available | Display firmware update status (diagnostic) | - |
 | Controller Update Available | Controller firmware update status (diagnostic) | - |
 | Latest Software Version | Latest available firmware version (diagnostic) | - |
+| System State | Controller state: starting, waiting, ready, updating, autotuning, mismatch, error; attributes `message` and `error_code`. Created when the firmware reports `sys` | Enum |
+| Controller Link | Link to the controller: ble, uart or none (diagnostic) | Enum |
+| Controller Link RSSI | BLE signal strength in dBm; unknown unless the link is BLE (diagnostic, disabled by default) | Signal strength |
+| Controller Link Latency | BLE round-trip latency in ms; unknown until measured (diagnostic, disabled by default) | Duration |
+| Controller Link Retransmits | Communication frames resent since boot (diagnostic, disabled by default) | - |
+| Scale Battery | Battery level of the connected BLE scale in %; unknown when no scale or level unknown (diagnostic) | Battery |
+| Active Scale Source | Source of the weight reading: hardware, bluetooth, estimation or inactive (diagnostic) | Enum |
+| Backflush Due | Backflush warning state (Active/Inactive) with severity; only created when the firmware reports the warning (diagnostic) | - |
+| Descaling Due | Descaling warning state (Active/Inactive) with severity; only created when the firmware reports the warning (diagnostic) | - |
+
+A change of the machine's update flag triggers a refresh of the OTA settings, so the Display/Controller Update Available sensors do not go stale.
+
+Entities that depend on a firmware key or capability are created once the machine reports it, which can be a few seconds after Home Assistant starts. The controller-link RSSI, latency and retransmit sensors are disabled by default; enable them in the entity settings.
+
+### Binary Sensors
+| Entity | Description | Device Class |
+|--------|-------------|--------------|
+| Controller Error | On when the controller reports an error code or an error/mismatch state (diagnostic) | Problem |
+| Update Available | On when a display or controller firmware update is available (diagnostic) | Update |
 
 ### Controls
 | Entity | Type | Description |
