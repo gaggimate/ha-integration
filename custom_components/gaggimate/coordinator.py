@@ -27,6 +27,8 @@ from .const import (
     MSG_TYPE_FLUSH_STOP,
     MSG_TYPE_GRIND_ACTIVATE,
     MSG_TYPE_GRIND_DEACTIVATE,
+    MSG_TYPE_GRIND_TARGET_LOWER,
+    MSG_TYPE_GRIND_TARGET_RAISE,
     MSG_TYPE_MODE_CHANGE,
     MSG_TYPE_OTA_SETTINGS,
     MSG_TYPE_OTA_SETTINGS_RESPONSE,
@@ -43,6 +45,14 @@ from .const import (
     MSG_TYPE_TEMP_RAISE,
     MachineMode,
     OTA_REFRESH_DELAY,
+    GRIND_DURATION_MAX_S,
+    GRIND_DURATION_MIN_S,
+    GRIND_TARGET_MESSAGE_DELAY,
+    GRIND_TARGET_SETTLE,
+    GRIND_TARGET_STALL,
+    GRIND_TARGET_TIMEOUT,
+    GRIND_WEIGHT_MAX_G,
+    GRIND_WEIGHT_MIN_G,
     STEAM_TOGGLE_SETTLE,
     MSG_TYPE_HISTORY_DELETE,
     MSG_TYPE_HISTORY_LIST,
@@ -109,6 +119,7 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         self._ota_refresh_task: asyncio.Task | None = None
         # Last steam toggle sent: (requested state, monotonic time); see set_steam_heater
         self._steam_pending: tuple[bool, float] | None = None
+        self._grind_target_lock = asyncio.Lock()  # one grind target change at a time
         # Pending brew confirmation: the warnings from evt:brew:confirm (None = nothing pending)
         self._brew_confirm: list[dict[str, Any]] | None = None
 
@@ -674,6 +685,78 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             return
         # Firmware reads the target only as a JSON integer
         await self.send_message({"tp": MSG_TYPE_CHANGE_GRIND_TARGET, "target": 1 if on else 0})
+
+    async def set_grind_target(self, kind: str, value: float) -> None:
+        """Set the grind target duration (kind "duration", seconds) or weight (kind "weight", grams).
+
+        The firmware only has raise/lower messages, each moving the active target by one step
+        (1 s or 0.5 g, clamped to 5-300 s / 5-250 g), so the delta is sent as that many
+        messages. Only the target type selected by `gt` can be changed. Stops early when `gt`
+        flips to the other type, when the reported target has reached the request, or when it
+        has not moved for GRIND_TARGET_STALL seconds; the whole call is capped by
+        GRIND_TARGET_TIMEOUT. Relative stepping can race with another client changing the target.
+        """
+        if kind == "duration":
+            by_weight, key, scale, step = False, "gtd", 1000.0, 1.0
+            low, high = GRIND_DURATION_MIN_S, GRIND_DURATION_MAX_S
+        elif kind == "weight":
+            by_weight, key, scale, step = True, "gtv", 1.0, 0.5
+            low, high = GRIND_WEIGHT_MIN_G, GRIND_WEIGHT_MAX_G
+        else:
+            raise ValueError(f"Unknown grind target kind: {kind}")
+
+        def current() -> float | None:
+            raw = (self.data or {}).get(key)
+            if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+                return None
+            return float(raw) / scale
+
+        def check_active() -> None:
+            if int_flag(self.data or {}, "gt") != by_weight:
+                raise UpdateFailed(f"Grind target is not set to {kind}")
+
+        # One change at a time (shared by both numbers); the start value is read under the lock
+        async with self._grind_target_lock:
+            check_active()
+            start = current()
+            if start is None:
+                raise UpdateFailed(f"Grind target {kind} unknown")
+
+            target = min(max(float(value), low), high)
+            steps = int(round((target - start) / step))
+            if steps == 0:
+                return
+            end = start + steps * step
+            raising = steps > 0
+            msg_type = MSG_TYPE_GRIND_TARGET_RAISE if raising else MSG_TYPE_GRIND_TARGET_LOWER
+
+            try:
+                async with asyncio.timeout(GRIND_TARGET_TIMEOUT):
+                    observed = start
+                    moved_at = time.monotonic()
+                    reached = False
+                    for _ in range(abs(steps)):
+                        check_active()
+                        now_value = current()
+                        if now_value is not None:
+                            if now_value != observed:
+                                observed, moved_at = now_value, time.monotonic()
+                            # Reported value lags the messages in flight, so it never overshoots
+                            if (raising and now_value >= end) or (not raising and now_value <= end):
+                                reached = True
+                                break
+                        if time.monotonic() - moved_at > GRIND_TARGET_STALL:
+                            raise UpdateFailed("Grind target stopped moving")
+                        await self.send_message({"tp": msg_type})
+                        await asyncio.sleep(GRIND_TARGET_MESSAGE_DELAY)
+                    # Let the reported value settle so the next call starts from a fresh one
+                    if not reached:
+                        deadline = time.monotonic() + GRIND_TARGET_SETTLE
+                        while current() != end and time.monotonic() < deadline:
+                            check_active()
+                            await asyncio.sleep(GRIND_TARGET_MESSAGE_DELAY)
+            except TimeoutError as err:
+                raise UpdateFailed("Timed out setting the grind target") from err
 
     async def request_profiles_list(self) -> None:
         try:

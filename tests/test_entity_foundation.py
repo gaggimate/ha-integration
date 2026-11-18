@@ -272,6 +272,9 @@ async def test_gated_data_none_treated_as_empty(hass: HomeAssistant, setup_integ
     entry.unload()
 
 
+EXPECTED_NUMBERS = ["127.0.0.1_grind_target_duration", "127.0.0.1_target_temperature_setpoint"]
+
+
 async def test_number_platform_unchanged_and_reload_no_duplicates(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
@@ -287,15 +290,16 @@ async def test_number_platform_unchanged_and_reload_no_duplicates(
             if e.domain == "number"
         )
 
-    assert numbers() == ["127.0.0.1_target_temperature_setpoint"]
-    assert len(hass.states.async_entity_ids("number")) == 1
+    assert numbers() == EXPECTED_NUMBERS
+    assert len(hass.states.async_entity_ids("number")) == 2
     total = len(er.async_entries_for_config_entry(registry, mock_config_entry.entry_id))
     # default frames (single_boiler_idle): 34 existing + 9 step-5 diagnostics (no backflush/descaling in warn)
     # + 2 step-6 power sensors (heater_power, pump_power; no puck/flow/steam on a single boiler without cp/cd/db)
     # + 2 step-9 buttons (flush_stop, process_clear; no tare_scale as hs is false; no steam_heater without db)
     # + 3 step-10 always-on entities (brew_confirm_pending, brew_confirm, brew_confirm_cancel)
     # + 1 step-11 Grind switch (gact present; no Grind By Weight as bta is 0)
-    assert total == 51
+    # + 1 step-12 Grind Target Duration number (gtd present; no Grind Target Weight as bta is 0)
+    assert total == 52
 
     for _ in range(2):
         assert await hass.config_entries.async_reload(mock_config_entry.entry_id)
@@ -303,8 +307,8 @@ async def test_number_platform_unchanged_and_reload_no_duplicates(
         coordinator = hass.data["gaggimate"][mock_config_entry.entry_id]
         await wait_until(lambda: coordinator.available)
         await settle()
-        assert numbers() == ["127.0.0.1_target_temperature_setpoint"]
-        assert len(hass.states.async_entity_ids("number")) == 1
+        assert numbers() == EXPECTED_NUMBERS
+        assert len(hass.states.async_entity_ids("number")) == 2
         # disabled-by-default entities are registered but have no state
         assert len(hass.states.async_entity_ids("sensor")) == len(
             [

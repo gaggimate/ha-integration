@@ -13,6 +13,15 @@ DEFAULT_SCAN_INTERVAL = 1  # seconds
 WS_CONNECT_TIMEOUT = 10  # seconds
 WS_RECONNECT_DELAYS = [1, 2, 4, 8, 16, 30]  # seconds
 WS_REQUEST_TIMEOUT = 30  # seconds
+GRIND_TARGET_MESSAGE_DELAY = 0.05  # seconds between raise/lower-grind-target messages
+GRIND_TARGET_TIMEOUT = 60  # seconds - overall cap for one set_grind_target call (worst case ~25 s)
+GRIND_TARGET_SETTLE = 1.5  # seconds - wait for the reported target to catch up (frames come every ~0.5 s) before the next call
+GRIND_TARGET_STALL = 3.0  # seconds - stop stepping when the reported target has not moved for this long
+# Firmware limits of the grind target (BREW_MIN/MAX_DURATION_MS, BREW_MIN/MAX_VOLUMETRIC)
+GRIND_DURATION_MIN_S = 5
+GRIND_DURATION_MAX_S = 300
+GRIND_WEIGHT_MIN_G = 5.0
+GRIND_WEIGHT_MAX_G = 250.0
 STEAM_TOGGLE_SETTLE = 3.0  # seconds - a sent steam toggle counts as applied until `sa` confirms it
 HISTORY_INDEX_PATH = "/api/history/index.bin"
 HISTORY_INDEX_MAX_BYTES = 2 * 1024 * 1024  # size cap for the shot index download
@@ -39,6 +48,8 @@ MSG_TYPE_STEAM_TOGGLE = "req:steam:toggle"
 MSG_TYPE_GRIND_ACTIVATE = "req:grind:activate"
 MSG_TYPE_GRIND_DEACTIVATE = "req:grind:deactivate"
 MSG_TYPE_CHANGE_GRIND_TARGET = "req:change-grind-target"
+MSG_TYPE_GRIND_TARGET_RAISE = "req:raise-grind-target"
+MSG_TYPE_GRIND_TARGET_LOWER = "req:lower-grind-target"
 MSG_TYPE_PROFILES_LIST = "req:profiles:list"
 MSG_TYPE_PROFILES_SELECT = "req:profiles:select"
 MSG_TYPE_OTA_SETTINGS = "req:ota-settings"
@@ -139,6 +150,8 @@ UNIQUE_ID_BREW_CONFIRM = "brew_confirm"
 UNIQUE_ID_BREW_CONFIRM_CANCEL = "brew_confirm_cancel"
 UNIQUE_ID_GRIND = "grind"
 UNIQUE_ID_GRIND_BY_WEIGHT = "grind_by_weight"
+UNIQUE_ID_GRIND_TARGET_DURATION = "grind_target_duration"
+UNIQUE_ID_GRIND_TARGET_WEIGHT = "grind_target_weight"
 
 # Services
 ATTR_MAX_SHOTS = "max_shots"

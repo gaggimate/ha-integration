@@ -54,6 +54,9 @@ STEAM_HEATER_KEYS = {"steam_heater"}
 # Step 11: Grind switch with gact present; Grind By Weight switch with bta == 1 (gact is in every fixture).
 GRIND_KEYS = {"grind"}
 GRIND_BY_WEIGHT_KEYS = {"grind_by_weight"}
+# Step 12: Grind Target Duration number with gtd present; Grind Target Weight number with bta == 1 and gtv present.
+GRIND_TARGET_DURATION_KEYS = {"grind_target_duration"}
+GRIND_TARGET_WEIGHT_KEYS = {"grind_target_weight"}
 
 # Disabled by default in the entity registry (entity_registry_enabled_default=False).
 DISABLED_BY_DEFAULT = {"link_rssi", "link_latency", "link_retransmits", "puck_resistance", "target_flow"}
@@ -75,6 +78,8 @@ PLATFORM_OF = {
     "grind": "switch",
     "grind_by_weight": "switch",
     "target_temperature_setpoint": "number",
+    "grind_target_duration": "number",
+    "grind_target_weight": "number",
     "controller_error": "binary_sensor",
     "update_available": "binary_sensor",
     "tank_level_low": "binary_sensor",
@@ -97,14 +102,15 @@ def _entity_id(hass: HomeAssistant, domain: str, key: str) -> str:
     [
         # no backflush/descaling entry in `warn` -> those warning sensors are not created;
         # cp/cd false and db false -> no puck, flow or steam sensors (heater/pump power always, from hp/pw)
-        ("single_boiler_idle", DIAGNOSTIC_KEYS | POWER_KEYS | SIMPLE_COMMAND_KEYS | GRIND_KEYS),
-        ("waiting_controller", DIAGNOSTIC_KEYS | POWER_KEYS | SIMPLE_COMMAND_KEYS | GRIND_KEYS),
+        ("single_boiler_idle", DIAGNOSTIC_KEYS | POWER_KEYS | SIMPLE_COMMAND_KEYS | GRIND_KEYS | GRIND_TARGET_DURATION_KEYS),
+        ("waiting_controller", DIAGNOSTIC_KEYS | POWER_KEYS | SIMPLE_COMMAND_KEYS | GRIND_KEYS | GRIND_TARGET_DURATION_KEYS),
         # cp and cd true -> puck/flow sensors; pkr/pf/tf present, wp absent (no process); db true -> steam;
         # htl and tlo true, hsl true and sbl false -> both Step 8 binary sensors
         (
             "dual_boiler_idle",
             DIAGNOSTIC_KEYS | DIAGNOSTIC_WARNING_KEYS | POWER_KEYS | PUCK_KEYS | STEAM_KEYS | TANK_STEAM_LEVEL_KEYS
-            | SIMPLE_COMMAND_KEYS | STEAM_HEATER_KEYS | GRIND_KEYS | GRIND_BY_WEIGHT_KEYS,
+            | SIMPLE_COMMAND_KEYS | STEAM_HEATER_KEYS | GRIND_KEYS | GRIND_BY_WEIGHT_KEYS
+            | GRIND_TARGET_DURATION_KEYS | GRIND_TARGET_WEIGHT_KEYS,
         ),
     ],
 )

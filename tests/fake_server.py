@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,15 @@ class FakeGaggiMate:
         self.redirect_followed = 0
         # shot id (str) -> error text for req:history:notes:get
         self.notes_errors: dict[str, str] = {}
+        # Grind target emulation: req:raise/lower-grind-target move gtd (1000 ms) when gt == 0 or gtv
+        # (0.5 g) when gt == 1, clamped to the firmware limits. The change is only reported in a
+        # slow frame ``grind_frame_delay`` seconds (+ up to ``grind_frame_jitter``) later.
+        # ``grind_mode``: "normal" | "stall" (value changes but is never reported) | "drop" (ignored).
+        self.grind_frame_delay = 0.3
+        self.grind_frame_jitter = 0.0
+        self.grind_mode = "normal"
+        self.grind_applied = 0
+        self._grind_frame_task: asyncio.Task | None = None
         self.requests: list[dict[str, Any]] = []
         self.connections: list[web.WebSocketResponse] = []
         self.connect_count = 0
@@ -73,6 +83,9 @@ class FakeGaggiMate:
         self._keepalive_task = asyncio.create_task(self._keepalive_loop())
 
     async def stop(self) -> None:
+        if self._grind_frame_task:
+            self._grind_frame_task.cancel()
+            self._grind_frame_task = None
         if self._keepalive_task:
             self._keepalive_task.cancel()
             try:
@@ -170,7 +183,35 @@ class FakeGaggiMate:
                 await self._respond(ws, req, "res:history:notes:get", error=nerr)
             else:
                 await self._respond(ws, req, "res:history:notes:get", notes=self.notes.get(str(req.get("id")), {}))
+        elif tp in ("req:raise-grind-target", "req:lower-grind-target"):
+            self._apply_grind_step(1 if tp == "req:raise-grind-target" else -1)
         # everything else is fire-and-forget in the firmware: no reply
+
+    def _apply_grind_step(self, direction: int) -> None:
+        if self.grind_mode == "drop":
+            return
+        if self.state.get("gt") == 1:
+            key, step, low, high = "gtv", 0.5, 5.0, 250.0
+        else:
+            key, step, low, high = "gtd", 1000, 5000, 300000
+        value = self.state.get(key)
+        if not isinstance(value, (int, float)):
+            return
+        new = min(max(value + direction * step, low), high)
+        if new == value:
+            return
+        self.grind_applied += 1
+        # mutate in place of a copy so a frame already being sent is not altered
+        self.state = {**self.state, key: new}
+        if self.grind_mode == "stall":
+            return
+        if self._grind_frame_task is None or self._grind_frame_task.done():
+            self._grind_frame_task = asyncio.create_task(self._grind_frame())
+
+    async def _grind_frame(self) -> None:
+        """Slow frame carrying the current state, shortly after a grind target change."""
+        await asyncio.sleep(self.grind_frame_delay + random.uniform(0, self.grind_frame_jitter))
+        await self.push(self.state)
 
     # -- test helpers ------------------------------------------------------
     async def push(self, frame: dict[str, Any]) -> None:
