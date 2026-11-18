@@ -317,6 +317,8 @@ def _get_warning_icon(
 SYSTEM_STATES = ["starting", "waiting", "ready", "updating", "autotuning", "mismatch", "error"]
 LINK_TYPES = ["ble", "uart", "none"]
 SCALE_SOURCES = ["hardware", "bluetooth", "estimation", "inactive"]
+# Sources whose cw is a real weight reading ("inactive" means no weight is produced).
+WEIGHT_SCALE_SOURCES = ("hardware", "bluetooth", "estimation")
 
 
 _logged_unknown: set[tuple[str, str]] = set()
@@ -333,6 +335,25 @@ def _enum_value(value: Any, options: list[str], what: str) -> str | None:
         _logged_unknown.add(marker)
         _LOGGER.debug("Unknown %s value from firmware: %r", what, value)
     return None
+
+
+def _current_weight_source(data: dict[str, Any]) -> str | None:
+    """Return the validated scaleSource (None when absent, null or unknown)."""
+    return _enum_value(data.get("scaleSource"), SCALE_SOURCES, "scale source")
+
+
+def _current_weight(data: dict[str, Any]) -> float | None:
+    """Return cw, the weight of the active scale source; None when no source produces a weight.
+
+    Firmware with scaleSource: that field decides. Older firmware without it: only a connected
+    BLE scale (bc) gives a weight, as before.
+    """
+    if "scaleSource" in data:
+        if _current_weight_source(data) not in WEIGHT_SCALE_SOURCES:
+            return None
+    elif not data.get("bc"):
+        return None
+    return _quantize(data.get("cw"), 1)
 
 
 def _to_int(value: Any) -> int | None:
@@ -475,9 +496,8 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfMass.GRAMS,
         icon="mdi:scale",
         suggested_display_precision=1,
-        value_fn=lambda data, _: None
-        if not data.get("bc") or data.get("cw") is None
-        else _quantize(data.get("cw"), 1),
+        value_fn=lambda data, _: _current_weight(data),
+        extra_attrs_fn=lambda data, _: {"source": _current_weight_source(data)},
     ),
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_CURRENT_PRESSURE,
