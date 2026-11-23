@@ -307,67 +307,94 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         """Handle an incoming WebSocket message."""
         try:
             message = json.loads(data)
-            msg_type = message.get("tp")
-
-            if msg_type == MSG_TYPE_STATUS:
-                self._reconnect_attempt = 0
-                self._last_status_time = time.monotonic()
-                
-                if not self._available:
-                    _LOGGER.info("GaggiMate became available")
-                    self._available = True
-                    self.async_update_listeners()
-                # Firmware sends partial status frames: fast telemetry every tick and the
-                # slow-changing state only when it changes (plus a full snapshot on connect).
-                # Merge onto the last known status; a key sent as null clears it.
-                previous = self.data or {}
-                merged = {**previous, **message}
-                if self._brew_confirm is not None and self._brew_confirm_stale(merged):
-                    self._clear_brew_confirm(notify=False)  # the update below notifies
-                self.async_set_updated_data(merged)
-                # Update availability changed: the OTA settings (versions, update flags) are stale
-                if "up" in previous and "up" in message and previous["up"] != message["up"]:
-                    self._schedule_ota_refresh()
-                return
-
-            # Resolve the pending request first, for every response type
-            rid = message.get("rid")
-            if rid and rid in self._pending_requests:
-                future = self._pending_requests.pop(rid)
-                if not future.done():
-                    future.set_result(message)
-
-            if isinstance(msg_type, str) and msg_type.startswith(MSG_TYPE_EVENT_PREFIX):
-                if msg_type == MSG_TYPE_EVENT_BREW_CONFIRM:
-                    self._set_brew_confirm(message.get("warn"))
-                elif msg_type == MSG_TYPE_EVENT_BREW_CONFIRM_CANCEL:
-                    self._clear_brew_confirm()
-                self._dispatch_event(msg_type, message)
-                return
-
-            if msg_type == MSG_TYPE_OTA_SETTINGS_RESPONSE:
-                self._ota_settings = message
-                self.async_update_listeners()
-                return
-
-            if msg_type == MSG_TYPE_PROFILES_LIST_RESPONSE:
-                profiles = message.get("profiles")
-                if message.get("error") or not isinstance(profiles, list):
-                    return
-                new_profiles: dict[str, str] = {}
-                for profile in profiles:
-                    if not isinstance(profile, dict):
-                        continue
-                    label = profile.get("label")
-                    pid = profile.get("id")
-                    if label and pid:
-                        new_profiles[label] = pid
-                self._profiles = new_profiles
-                self.async_update_listeners()
-                return
-
+            self._process_message(message)
         except json.JSONDecodeError as err:
             _LOGGER.error("Invalid WebSocket JSON: %s", err)
+
+    def _process_message(self, message: dict[str, Any]) -> None:
+        """Route a decoded message to its handler."""
+        msg_type = message.get("tp")
+
+        if msg_type == MSG_TYPE_STATUS:
+            self._handle_status(message)
+            return
+
+        # Resolve the pending request first, for every response type
+        self._resolve_pending(message)
+
+        if isinstance(msg_type, str) and msg_type.startswith(MSG_TYPE_EVENT_PREFIX):
+            self._handle_event(msg_type, message)
+            return
+
+        if msg_type == MSG_TYPE_OTA_SETTINGS_RESPONSE:
+            self._handle_ota_response(message)
+            return
+
+        if msg_type == MSG_TYPE_PROFILES_LIST_RESPONSE:
+            self._handle_profiles_response(message)
+
+    def _handle_status(self, message: dict[str, Any]) -> None:
+        """Merge a (partial) status frame into the coordinator data."""
+        self._reconnect_attempt = 0
+        self._last_status_time = time.monotonic()
+
+        if not self._available:
+            _LOGGER.info("GaggiMate became available")
+            self._available = True
+            self.async_update_listeners()
+        # Firmware sends partial status frames: fast telemetry every tick and the
+        # slow-changing state only when it changes (plus a full snapshot on connect).
+        # Merge onto the last known status; a key sent as null clears it.
+        previous = self.data or {}
+        merged = {**previous, **message}
+        if self._brew_confirm is not None and self._brew_confirm_stale(merged):
+            self._clear_brew_confirm(notify=False)  # the update below notifies
+        self.async_set_updated_data(merged)
+        # Update availability changed: the OTA settings (versions, update flags) are stale
+        if "up" in previous and "up" in message and previous["up"] != message["up"]:
+            self._schedule_ota_refresh()
+
+    def _resolve_pending(self, message: dict[str, Any]) -> None:
+        """Complete the pending request matching the message's rid, if any."""
+        rid = message.get("rid")
+        if rid and rid in self._pending_requests:
+            future = self._pending_requests.pop(rid)
+            if not future.done():
+                future.set_result(message)
+
+    def _handle_event(self, msg_type: str, message: dict[str, Any]) -> None:
+        """Track brew-confirm state for events, then pass them to listeners."""
+        if msg_type == MSG_TYPE_EVENT_BREW_CONFIRM:
+            self._set_brew_confirm(message.get("warn"))
+        elif msg_type == MSG_TYPE_EVENT_BREW_CONFIRM_CANCEL:
+            self._clear_brew_confirm()
+        self._dispatch_event(msg_type, message)
+
+    def _handle_ota_response(self, message: dict[str, Any]) -> None:
+        """Store the OTA settings response."""
+        self._ota_settings = message
+        self.async_update_listeners()
+
+    def _handle_profiles_response(self, message: dict[str, Any]) -> None:
+        """Store the profile list; an error or malformed list keeps the current one."""
+        profiles = message.get("profiles")
+        if message.get("error") or not isinstance(profiles, list):
+            return
+        self._profiles = self._parse_profiles(profiles)
+        self.async_update_listeners()
+
+    @staticmethod
+    def _parse_profiles(profiles: list[Any]) -> dict[str, str]:
+        """Map profile label to id, skipping entries without both."""
+        parsed: dict[str, str] = {}
+        for profile in profiles:
+            if not isinstance(profile, dict):
+                continue
+            label = profile.get("label")
+            pid = profile.get("id")
+            if label and pid:
+                parsed[label] = pid
+        return parsed
 
     @property
     def brew_confirm(self) -> list[dict[str, Any]] | None:
