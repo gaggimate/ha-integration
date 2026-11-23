@@ -20,6 +20,8 @@ _LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 0
 
+_INVALID_FIELD_LOG = "Event %s: missing or invalid %r (%r)"
+
 EVENT_SHOT_SAVED = "shot_saved"
 EVENT_SHOT_FINISHED = "shot_finished"
 EVENT_SCALE_DISCONNECTED = "scale_disconnected"
@@ -34,7 +36,7 @@ def _int_field(message: dict[str, Any], key: str, tp: str) -> int | None:
     value = message.get(key)
     if isinstance(value, int) and not isinstance(value, bool):
         return value
-    _LOGGER.debug("Event %s: missing or invalid %r (%r)", tp, key, value)
+    _LOGGER.debug(_INVALID_FIELD_LOG, tp, key, value)
     return None
 
 
@@ -43,7 +45,7 @@ def _float_field(message: dict[str, Any], key: str, tp: str) -> float | None:
     value = message.get(key)
     if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
         return float(value)
-    _LOGGER.debug("Event %s: missing or invalid %r (%r)", tp, key, value)
+    _LOGGER.debug(_INVALID_FIELD_LOG, tp, key, value)
     return None
 
 
@@ -52,7 +54,7 @@ def _str_field(message: dict[str, Any], key: str, tp: str) -> str | None:
     value = message.get(key)
     if isinstance(value, str):
         return value
-    _LOGGER.debug("Event %s: missing or invalid %r (%r)", tp, key, value)
+    _LOGGER.debug(_INVALID_FIELD_LOG, tp, key, value)
     return None
 
 

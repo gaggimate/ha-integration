@@ -14,32 +14,57 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import ipaddress
 import json
+import re
 import sys
 from pathlib import Path
 
 import aiohttp
 
 
+_HOSTNAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$")
+_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _validate_host(host: str) -> str:
+    """Accept only a bare hostname or IP address (no scheme, path, port or whitespace)."""
+    if not _HOSTNAME_RE.fullmatch(host):
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            raise SystemExit(f"Invalid host {host!r}: give a bare hostname or IP address") from None
+    return host
+
+
+def _validate_out_dir(out_dir: str) -> Path:
+    """Resolve the output directory; it must not be empty."""
+    if not out_dir.strip():
+        raise SystemExit("--out-dir must not be empty")
+    return Path(out_dir).resolve()
+
+
 async def record(host: str, port: int, seconds: float) -> tuple[dict, dict]:
     state: dict | None = None
     telemetry: dict | None = None
-    async with aiohttp.ClientSession() as session:
-        async with session.ws_connect(f"ws://{host}:{port}/ws", timeout=aiohttp.ClientTimeout(total=10)) as ws:
-            try:
-                async with asyncio.timeout(seconds):
-                    async for msg in ws:
-                        if msg.type != aiohttp.WSMsgType.TEXT:
-                            continue
-                        frame = json.loads(msg.data)
-                        if frame.get("tp") != "evt:status":
-                            continue
-                        if "sys" in frame or "warn" in frame:
-                            state = frame
-                        elif "ct" in frame:
-                            telemetry = frame
-            except TimeoutError:
-                pass
+    async with (
+        aiohttp.ClientSession() as session,
+        session.ws_connect(f"ws://{host}:{port}/ws", timeout=aiohttp.ClientTimeout(total=10)) as ws,
+    ):
+        try:
+            async with asyncio.timeout(seconds):
+                async for msg in ws:
+                    if msg.type != aiohttp.WSMsgType.TEXT:
+                        continue
+                    frame = json.loads(msg.data)
+                    if frame.get("tp") != "evt:status":
+                        continue
+                    if "sys" in frame or "warn" in frame:
+                        state = frame
+                    elif "ct" in frame:
+                        telemetry = frame
+        except TimeoutError:
+            pass
     if state is None or telemetry is None:
         raise SystemExit(
             f"Did not see both a state and a telemetry frame in {seconds}s "
@@ -56,14 +81,18 @@ def main() -> int:
     parser.add_argument("--seconds", type=float, default=5.0)
     parser.add_argument(
         "--out-dir",
-        type=Path,
-        default=Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "frames",
+        default=str(Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "frames"),
     )
     args = parser.parse_args()
 
-    state, telemetry = asyncio.run(record(args.host, args.port, args.seconds))
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-    target = args.out_dir / f"{args.name}.json"
+    host = _validate_host(args.host)
+    out_dir = _validate_out_dir(args.out_dir)
+    if not _NAME_RE.fullmatch(args.name) or args.name in (".", ".."):
+        raise SystemExit(f"Invalid --name {args.name!r}: use letters, digits, '_', '-' and '.' only")
+
+    state, telemetry = asyncio.run(record(host, args.port, args.seconds))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    target = out_dir / f"{args.name}.json"
     target.write_text(json.dumps({"state": state, "telemetry": telemetry}, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote {target}")
     return 0

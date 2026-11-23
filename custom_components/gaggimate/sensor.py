@@ -158,12 +158,18 @@ class GaggiMateSensor(GaggiMateEntity, SensorEntity):
         return {}
 
 
+ICON_WATER = "mdi:water"
+ICON_WATER_SYNC = "mdi:water-sync"
+ICON_SCALE = "mdi:scale"
+ICON_THERMOMETER = "mdi:thermometer"
+ICON_COFFEE_MAKER = "mdi:coffee-maker"
+
 STATUS_ICONS = {
     "Idle": "mdi:coffee-maker-outline",
     "Brewing": "mdi:coffee",
     "Steaming": "mdi:cloud",
     "Grinding": "mdi:grain",
-    "Pouring Water": "mdi:water",
+    "Pouring Water": ICON_WATER,
 }
 
 
@@ -214,11 +220,27 @@ def _get_mode_icon(data: dict[str, Any]) -> str:
     """Map raw mode to icon."""
     mode_value = data.get("m")
     if mode_value is None:
-        return "mdi:coffee-maker"
+        return ICON_COFFEE_MAKER
     try:
-        return MODE_ICONS.get(MachineMode(mode_value), "mdi:coffee-maker")
+        return MODE_ICONS.get(MachineMode(mode_value), ICON_COFFEE_MAKER)
     except ValueError:
-        return "mdi:coffee-maker"
+        return ICON_COFFEE_MAKER
+
+
+def _scale_connection(data: dict[str, Any]) -> str | None:
+    """Map the raw scale-connected flag to a label."""
+    connected = data.get("bc")
+    if connected is None:
+        return None
+    return "Connected" if connected else "Disconnected"
+
+
+def _shot_volume_progress(data: dict[str, Any]) -> float | None:
+    """Return the volumetric shot progress, or None for other process types."""
+    process = data.get("process") or {}
+    if process.get("tt") != "volumetric":
+        return None
+    return _quantize(process.get("pp"), 1)
 
 
 class DeadbandFilter:
@@ -438,7 +460,7 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        icon="mdi:thermometer",
+        icon=ICON_THERMOMETER,
         suggested_display_precision=1,
         value_fn=lambda data, _: _temp_deadband(_quantize(data.get("ct"), 1))
         if data.get("m") == MachineMode.STANDBY
@@ -483,10 +505,8 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_SCALE_CONNECTED,
         name="Scale Connection",
-        icon="mdi:scale",
-        value_fn=lambda data, _: None
-        if data.get("bc") is None
-        else ("Connected" if data.get("bc") else "Disconnected"),
+        icon=ICON_SCALE,
+        value_fn=lambda data, _: _scale_connection(data),
     ),
     GaggiMateSensorEntityDescription(
         key=UNIQUE_ID_CURRENT_WEIGHT,
@@ -494,7 +514,7 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.WEIGHT,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfMass.GRAMS,
-        icon="mdi:scale",
+        icon=ICON_SCALE,
         suggested_display_precision=1,
         value_fn=lambda data, _: _current_weight(data),
         extra_attrs_fn=lambda data, _: {"source": _current_weight_source(data)},
@@ -547,11 +567,7 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfMass.GRAMS,
         icon="mdi:chart-line",
-        value_fn=lambda data, _: (
-            None
-            if (process := data.get("process") or {}).get("tt") != "volumetric"
-            else _quantize(process.get("pp"), 1)
-        ),
+        value_fn=lambda data, _: _shot_volume_progress(data),
         suggested_display_precision=1,
     ),
     GaggiMateSensorEntityDescription(
@@ -600,7 +616,7 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         name="Tank level",
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="%",
-        icon="mdi:water",
+        icon=ICON_WATER,
         suggested_display_precision=0,
         value_fn=lambda data, _: _quantize(data.get("wl"), 0),
     ),
@@ -618,10 +634,10 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         key=UNIQUE_ID_WARNING_WATER,
         name="Water Tank Low",
         entity_category=EntityCategory.DIAGNOSTIC,
-        icon="mdi:water",
+        icon=ICON_WATER,
         value_fn=lambda data, _: _get_warning_state(data, "water"),
         icon_fn=lambda data, _: _get_warning_icon(
-            data, "water", "mdi:water"
+            data, "water", ICON_WATER
         ),
         extra_attrs_fn=lambda data, _: _get_warning_attrs(data, "water"),
     ),
@@ -629,10 +645,10 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         key=UNIQUE_ID_WARNING_TEMPERATURE,
         name="Temperature Not Stable",
         entity_category=EntityCategory.DIAGNOSTIC,
-        icon="mdi:thermometer",
+        icon=ICON_THERMOMETER,
         value_fn=lambda data, _: _get_warning_state(data, "temperature"),
         icon_fn=lambda data, _: _get_warning_icon(
-            data, "temperature", "mdi:thermometer"
+            data, "temperature", ICON_THERMOMETER
         ),
         extra_attrs_fn=lambda data, _: _get_warning_attrs(
             data, "temperature"
@@ -653,10 +669,10 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         key=UNIQUE_ID_WARNING_FLUSH,
         name="Flush Recommended",
         entity_category=EntityCategory.DIAGNOSTIC,
-        icon="mdi:water-sync",
+        icon=ICON_WATER_SYNC,
         value_fn=lambda data, _: _get_warning_state(data, "flush"),
         icon_fn=lambda data, _: _get_warning_icon(
-            data, "flush", "mdi:water-sync"
+            data, "flush", ICON_WATER_SYNC
         ),
         extra_attrs_fn=lambda data, _: _get_warning_attrs(data, "flush"),
     ),
@@ -757,7 +773,7 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         name="Active Scale Source",
         device_class=SensorDeviceClass.ENUM,
         options=SCALE_SOURCES,
-        icon="mdi:scale",
+        icon=ICON_SCALE,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data, _: _enum_value(data.get("scaleSource"), SCALE_SOURCES, "scale source"),
         supported_fn=has_key("scaleSource"),
@@ -766,9 +782,9 @@ SENSORS: tuple[GaggiMateSensorEntityDescription, ...] = (
         key=UNIQUE_ID_WARNING_BACKFLUSH,
         name="Backflush Due",
         entity_category=EntityCategory.DIAGNOSTIC,
-        icon="mdi:water-sync",
+        icon=ICON_WATER_SYNC,
         value_fn=lambda data, _: _get_warning_state(data, "backflush"),
-        icon_fn=lambda data, _: _get_warning_icon(data, "backflush", "mdi:water-sync"),
+        icon_fn=lambda data, _: _get_warning_icon(data, "backflush", ICON_WATER_SYNC),
         extra_attrs_fn=lambda data, _: _get_warning_attrs(data, "backflush"),
         supported_fn=has_warning_key("backflush"),
     ),

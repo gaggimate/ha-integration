@@ -414,7 +414,8 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
 
     def _dispatch_event(self, msg_type: str, message: dict[str, Any]) -> None:
         """Pass an event message to all listeners; one failing listener does not stop the rest."""
-        for listener in list(self._event_listeners):
+        # Iterate a snapshot: listeners may unsubscribe while being notified
+        for listener in self._event_listeners.copy():
             try:
                 listener(msg_type, message)
             except Exception:  # noqa: BLE001
@@ -460,8 +461,6 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
                     level = logging.WARNING if self._reconnect_attempt == 1 else logging.DEBUG
                     _LOGGER.log(level, "Reconnect failed: %s", err)
 
-        except asyncio.CancelledError:
-            raise
         finally:
             self._reconnect_task = None
 

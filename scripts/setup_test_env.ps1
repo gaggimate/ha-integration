@@ -44,7 +44,7 @@ function Get-UvVersion([string]$exe) {
     try {
         $out = Invoke-Native { & $exe --version 2>$null }
         if ($out -match '(\d+\.\d+\.\d+)') { return [version]$Matches[1] }
-    } catch { }
+    } catch { Write-Verbose "Could not read uv version from '$exe': $_" }
     return $null
 }
 
@@ -98,7 +98,7 @@ function Get-BootstrappedUv([switch]$Upgrade) {
         if (-not $boot) { throw 'No usable python or py launcher found to bootstrap uv. Install uv >= 0.9 (user-level) and retry.' }
         $extra = @(); if ($boot.Count -gt 1) { $extra = $boot[1..($boot.Count - 1)] }
         if (-not (Test-Path (Join-Path $BootDir 'Scripts\python.exe'))) {
-            Write-Host "Bootstrapping uv into $BootDir using: $($boot -join ' ')"
+            Write-Information -InformationAction Continue "Bootstrapping uv into $BootDir using: $($boot -join ' ')"
             Invoke-Checked 'bootstrap venv' { & $boot[0] @extra -m venv $BootDir }
         }
         $bootPy = Join-Path $BootDir 'Scripts\python.exe'
@@ -106,7 +106,7 @@ function Get-BootstrappedUv([switch]$Upgrade) {
         $v = Get-UvVersion $BootUv
     }
     if (-not ($v -and $v -ge $MinUv)) { throw "Bootstrapped uv is $v; need >= $MinUv." }
-    Write-Host "Using private uv $v at $BootUv"
+    Write-Information -InformationAction Continue "Using private uv $v at $BootUv"
     return $BootUv
 }
 
@@ -127,7 +127,7 @@ function Get-VenvPyVersion {
     try {
         $o = Invoke-Native { & $VenvPy -c "import sys; print('%d.%d.%d' % sys.version_info[:3])" 2>$null }
         if ($LASTEXITCODE -eq 0 -and "$o" -match '^\d+\.\d+\.\d+$') { return [version]"$o" }
-    } catch { }
+    } catch { Write-Verbose "Could not read the venv Python version: $_" }
     return $null
 }
 

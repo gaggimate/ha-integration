@@ -293,7 +293,8 @@ async def test_shot_finished_bad_payload_gives_none(
     await setup_integration()
     state = await _fire_and_get(hass, fake_gaggimate, "shot_events", {"tp": "evt:shot-finished-stats", **fields})
     assert state.attributes["event_type"] == "shot_finished"
-    assert (state.attributes["max_pressure_bar"], state.attributes["avg_flow_ml_s"]) == expect
+    actual = (state.attributes["max_pressure_bar"], state.attributes["avg_flow_ml_s"])
+    assert actual == expect
     assert not _own_warnings(caplog)
 
 

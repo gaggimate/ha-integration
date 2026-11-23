@@ -171,7 +171,8 @@ async def _trim_device(
         try:
             await coordinator.delete_history_item(shot_id)
             deleted += 1
-        except Exception as err:  # noqa: BLE001 - keep going, report at the end
+        # Keep going, report at the end
+        except Exception as err:  # noqa: BLE001
             failures.append(f"{coordinator.host}: shot {shot_id}: {err}")
         # Yield to event loop between deletions and avoid hammering device
         await asyncio.sleep(0.1 if idx % 10 == 0 else 0)

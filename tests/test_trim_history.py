@@ -102,20 +102,23 @@ def test_parse_corrupt_basic(data: bytes, match: str) -> None:
 
 
 def test_parse_wrong_version() -> None:
+    data = build_index(_entries(1), version=2)
     with pytest.raises(ShotIndexError, match="version"):
-        parse_shot_index(build_index(_entries(1), version=2))
+        parse_shot_index(data)
 
 
 def test_parse_wrong_entry_size() -> None:
     data = bytearray(build_index(_entries(1)))
     struct.pack_into("<H", data, 6, 64)
+    payload = bytes(data)
     with pytest.raises(ShotIndexError, match="entry size"):
-        parse_shot_index(bytes(data))
+        parse_shot_index(payload)
 
 
 def test_parse_truncated() -> None:
+    data = build_index(_entries(3))[:-1]
     with pytest.raises(ShotIndexError, match="truncated"):
-        parse_shot_index(build_index(_entries(3))[:-1])
+        parse_shot_index(data)
 
 
 def test_parse_count_larger_than_data() -> None:

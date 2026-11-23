@@ -615,8 +615,9 @@ async def test_stall_raises(
     with patch(f"{COORD}.GRIND_TARGET_MESSAGE_DELAY", 0.03), patch(f"{COORD}.GRIND_TARGET_STALL", 0.5):
         loop = asyncio.get_running_loop()
         t0 = loop.time()
+        call = coordinator.set_grind_target("duration", 200)  # 175 steps = 5 s
         with pytest.raises(UpdateFailed, match="stopped moving"):
-            await asyncio.wait_for(coordinator.set_grind_target("duration", 200), 10)  # 175 steps = 5 s
+            await asyncio.wait_for(call, 10)
         assert loop.time() - t0 < 3
     assert 0 < len(_sent(fake_gaggimate)) < 175
     assert not coordinator._grind_target_lock.locked()
@@ -642,8 +643,9 @@ async def test_timeout_raises(fake_gaggimate: FakeGaggiMate, setup_integration: 
         patch(f"{COORD}.GRIND_TARGET_TIMEOUT", 0.3),
         patch(f"{COORD}.GRIND_TARGET_MESSAGE_DELAY", 0.05),
     ):
+        call = coordinator.set_grind_target("duration", 200)
         with pytest.raises(UpdateFailed, match="Timed out"):
-            await asyncio.wait_for(coordinator.set_grind_target("duration", 200), 5)
+            await asyncio.wait_for(call, 5)
     assert 0 < len(_sent(fake_gaggimate)) < 175
     assert not coordinator._grind_target_lock.locked()
 
