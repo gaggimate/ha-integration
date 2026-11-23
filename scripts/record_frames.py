@@ -44,6 +44,15 @@ def _validate_out_dir(out_dir: str) -> Path:
     return Path(out_dir).resolve()
 
 
+def _classify(frame: dict, state: dict | None, telemetry: dict | None) -> tuple[dict | None, dict | None]:
+    """Return the (state, telemetry) pair updated with one ``evt:status`` frame."""
+    if "sys" in frame or "warn" in frame:
+        return frame, telemetry
+    if "ct" in frame:
+        return state, frame
+    return state, telemetry
+
+
 async def record(host: str, port: int, seconds: float) -> tuple[dict, dict]:
     state: dict | None = None
     telemetry: dict | None = None
@@ -59,10 +68,7 @@ async def record(host: str, port: int, seconds: float) -> tuple[dict, dict]:
                     frame = json.loads(msg.data)
                     if frame.get("tp") != "evt:status":
                         continue
-                    if "sys" in frame or "warn" in frame:
-                        state = frame
-                    elif "ct" in frame:
-                        telemetry = frame
+                    state, telemetry = _classify(frame, state, telemetry)
         except TimeoutError:
             pass
     if state is None or telemetry is None:
