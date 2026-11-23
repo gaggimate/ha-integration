@@ -820,30 +820,38 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         if self._session is None or self._session.closed:
             raise UpdateFailed("Not connected")
         url = f"{self.http_base_url}{HISTORY_INDEX_PATH}"
-        legacy = False
-        data = bytearray()
+        data = await self._download_shot_index(url)
+        if data is None:
+            _LOGGER.debug("No shot index at %s, trying legacy history list", url)
+            return await self.request_history_list()
+        return parse_shot_index(data)
+
+    async def _download_shot_index(self, url: str) -> bytes | None:
+        """Download the shot index; return None on HTTP 404 (legacy firmware)."""
         try:
             timeout = aiohttp.ClientTimeout(total=WS_REQUEST_TIMEOUT)
             async with self._session.get(url, timeout=timeout, allow_redirects=False) as resp:
                 if resp.status == 404:
-                    legacy = True
-                elif resp.status != 200:
+                    return None
+                if resp.status != 200:
                     raise UpdateFailed(f"Shot index request failed: HTTP {resp.status}")
-                if not legacy:
-                    if (resp.content_length or 0) > HISTORY_INDEX_MAX_BYTES:
-                        raise UpdateFailed("Shot index is too large")
-                    async for chunk in resp.content.iter_chunked(8192):
-                        data.extend(chunk)
-                        if len(data) > HISTORY_INDEX_MAX_BYTES:
-                            raise UpdateFailed("Shot index is too large")
+                return await self._read_capped(resp)
         except UpdateFailed:
             raise
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise UpdateFailed(f"Failed to fetch shot index: {err or type(err).__name__}") from err
-        if legacy:
-            _LOGGER.debug("No shot index at %s, trying legacy history list", url)
-            return await self.request_history_list()
-        return parse_shot_index(bytes(data))
+
+    @staticmethod
+    async def _read_capped(resp: aiohttp.ClientResponse) -> bytes:
+        """Read the response body, refusing more than HISTORY_INDEX_MAX_BYTES."""
+        if (resp.content_length or 0) > HISTORY_INDEX_MAX_BYTES:
+            raise UpdateFailed("Shot index is too large")
+        data = bytearray()
+        async for chunk in resp.content.iter_chunked(8192):
+            data.extend(chunk)
+            if len(data) > HISTORY_INDEX_MAX_BYTES:
+                raise UpdateFailed("Shot index is too large")
+        return bytes(data)
 
     async def delete_history_item(self, shot_id: int | str) -> None:
         await self._request({"tp": MSG_TYPE_HISTORY_DELETE, "id": str(shot_id)})
