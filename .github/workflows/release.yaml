@@ -26,4 +26,5 @@ jobs:
             🚀 Release ${{ github.ref_name }}
             - Changes go here
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          makeLatest: ${{ !contains(github.ref_name, '-') }}
