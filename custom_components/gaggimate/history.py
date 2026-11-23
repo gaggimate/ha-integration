@@ -110,6 +110,69 @@ def _has_annotation(notes: Any) -> bool:
     return False
 
 
+async def _select_candidates(
+    coordinator: GaggiMateCoordinator, sorted_history: list[dict[str, Any]], keep_annotated: bool
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Return the deletable shots (oldest first) and failure descriptions for unchecked shots.
+
+    With keep_annotated, each shot's notes are fetched; shots whose notes cannot be read
+    are kept and reported.
+    """
+    if not keep_annotated:
+        return [item for item in sorted_history if item.get("id") is not None], []
+
+    failures: list[str] = []
+    candidates: list[dict[str, Any]] = []
+    annotated_count = 0
+    unchecked = 0
+    for item in sorted_history:
+        shot_id = item.get("id")
+        if shot_id is None:
+            continue  # cannot be deleted anyway
+        try:
+            notes = await coordinator.get_history_notes(shot_id)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning(
+                "Cannot determine annotation status for shot %s on %s: %s",
+                shot_id,
+                coordinator.host,
+                err,
+            )
+            annotated_count += 1  # unknown: keep it
+            unchecked += 1
+            continue
+        if _has_annotation(notes):
+            annotated_count += 1
+        else:
+            candidates.append(item)
+        await asyncio.sleep(0)
+
+    if unchecked:
+        failures.append(f"{coordinator.host}: {unchecked} shots could not be checked for notes and were kept")
+    if annotated_count:
+        _LOGGER.info("Preserved %s annotated shots on %s", annotated_count, coordinator.host)
+    return candidates, failures
+
+
+async def _delete_oldest(
+    coordinator: GaggiMateCoordinator, to_delete: list[dict[str, Any]]
+) -> tuple[int, list[str]]:
+    """Delete the given shots in order. Returns the deleted count and deletion failure descriptions."""
+    deleted = 0
+    failures: list[str] = []
+    for idx, item in enumerate(to_delete, start=1):
+        shot_id = item["id"]
+        try:
+            await coordinator.delete_history_item(shot_id)
+            deleted += 1
+        # Keep going, report at the end
+        except Exception as err:  # noqa: BLE001
+            failures.append(f"{coordinator.host}: shot {shot_id}: {err}")
+        # Yield to event loop between deletions and avoid hammering device
+        await asyncio.sleep(0.1 if idx % 10 == 0 else 0)
+    return deleted, failures
+
+
 async def _trim_device(
     coordinator: GaggiMateCoordinator, max_shots: int, keep_annotated: bool
 ) -> list[str]:
@@ -118,42 +181,10 @@ async def _trim_device(
     Reading and parsing happen completely before the first delete, so a read or
     parse error can never be followed by a delete.
     """
-    failures: list[str] = []
     history = await coordinator.async_fetch_history_index()
     sorted_history = sorted(history, key=_sort_key)
 
-    if keep_annotated:
-        candidates: list[dict[str, Any]] = []
-        annotated_count = 0
-        unchecked = 0
-        for item in sorted_history:
-            shot_id = item.get("id")
-            if shot_id is None:
-                continue  # cannot be deleted anyway
-            try:
-                notes = await coordinator.get_history_notes(shot_id)
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.warning(
-                    "Cannot determine annotation status for shot %s on %s: %s",
-                    shot_id,
-                    coordinator.host,
-                    err,
-                )
-                annotated_count += 1  # unknown: keep it
-                unchecked += 1
-                continue
-            if _has_annotation(notes):
-                annotated_count += 1
-            else:
-                candidates.append(item)
-            await asyncio.sleep(0)
-
-        if unchecked:
-            failures.append(f"{coordinator.host}: {unchecked} shots could not be checked for notes and were kept")
-        if annotated_count:
-            _LOGGER.info("Preserved %s annotated shots on %s", annotated_count, coordinator.host)
-    else:
-        candidates = [item for item in sorted_history if item.get("id") is not None]
+    candidates, failures = await _select_candidates(coordinator, sorted_history, keep_annotated)
 
     if len(candidates) <= max_shots:
         _LOGGER.info(
@@ -165,17 +196,8 @@ async def _trim_device(
         return failures
 
     to_delete = candidates[: len(candidates) - max_shots]
-    deleted = 0
-    for idx, item in enumerate(to_delete, start=1):
-        shot_id = item["id"]
-        try:
-            await coordinator.delete_history_item(shot_id)
-            deleted += 1
-        # Keep going, report at the end
-        except Exception as err:  # noqa: BLE001
-            failures.append(f"{coordinator.host}: shot {shot_id}: {err}")
-        # Yield to event loop between deletions and avoid hammering device
-        await asyncio.sleep(0.1 if idx % 10 == 0 else 0)
+    deleted, delete_failures = await _delete_oldest(coordinator, to_delete)
+    failures.extend(delete_failures)
 
     msg = "Trimmed shot history for %s, kept %s newest, deleted %s older entries" % (
         coordinator.host,
