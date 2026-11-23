@@ -469,34 +469,38 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         while not self._shutting_down:
             try:
                 await asyncio.sleep(1)
-
-                if self._last_status_time is None:
-                    continue
-
-                elapsed = time.monotonic() - self._last_status_time
-
-                if elapsed > WS_UNAVAILABLE_TIMEOUT:
-                    _LOGGER.warning(
-                        "No status update for %.1f seconds - marking unavailable",
-                        elapsed,
-                    )
-                
-                    self._last_status_time = None
-                
-                    self._clear_brew_confirm(notify=False)
-                    if self._available:
-                        self._available = False
-                        self.async_set_updated_data({})
-                        self.async_update_listeners()
-                    
-                    # Closing WS causes listener to trigger reconnect
-                    if self._ws and not self._ws.closed:
-                        await self._ws.close()
-
-            except asyncio.CancelledError:
-                raise
+                await self._check_once()
             except Exception as err:
                 _LOGGER.error("Availability check error: %s", err)
+
+    async def _check_once(self) -> None:
+        """Run one availability check; mark stale if no recent status."""
+        if self._last_status_time is None:
+            return
+
+        elapsed = time.monotonic() - self._last_status_time
+
+        if elapsed > WS_UNAVAILABLE_TIMEOUT:
+            await self._mark_stale(elapsed)
+
+    async def _mark_stale(self, elapsed: float) -> None:
+        """Mark the device unavailable and close the WebSocket to reconnect."""
+        _LOGGER.warning(
+            "No status update for %.1f seconds - marking unavailable",
+            elapsed,
+        )
+
+        self._last_status_time = None
+
+        self._clear_brew_confirm(notify=False)
+        if self._available:
+            self._available = False
+            self.async_set_updated_data({})
+            self.async_update_listeners()
+
+        # Closing WS causes listener to trigger reconnect
+        if self._ws and not self._ws.closed:
+            await self._ws.close()
 
     async def send_message(self, message: dict[str, Any]) -> None:
         """Send message to the device."""
