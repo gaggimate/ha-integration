@@ -22,7 +22,7 @@ from homeassistant.helpers import entity_registry as er
 
 from custom_components.gaggimate.coordinator import GaggiMateCoordinator
 
-from .conftest import SetupIntegration, settle, wait_until
+from .conftest import SetupIntegration, record_states, settle, wait_until
 from .fake_server import FakeGaggiMate, load_json
 
 HOST = "127.0.0.1"
@@ -320,14 +320,17 @@ async def test_availability_timeout_clears(
         coordinator = await setup_integration()
         await _raise_pending(fake_gaggimate, coordinator, WARN_ERR)
         assert _pending(hass).state == "on"
+        # The coordinator reconnects right after the watchdog fires, so the unavailable state is
+        # transient: record the state history instead of sampling it.
+        pending_id = _pending(hass).entity_id
+        history = record_states(hass, pending_id)
         # no keepalive: the watchdog fires
-        await wait_until(lambda: not coordinator.available, timeout=6)
+        await wait_until(lambda: UNAVAILABLE in history[pending_id], timeout=6)
         assert coordinator.brew_confirm is None
-        await settle()
-        assert _pending(hass).state == UNAVAILABLE
         await wait_until(lambda: coordinator.available, timeout=8)
-        await settle()
-        assert _pending(hass).state == "off"
+        await wait_until(lambda: _pending(hass).state == "off")
+        assert coordinator.brew_confirm is None
+        assert history[pending_id][-1] == "off"
 
 
 async def test_confirm_not_ready_raises_and_keeps_pending(

@@ -12,7 +12,8 @@ from unittest.mock import patch
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_PORT
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_track_state_change_event
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.gaggimate.const import DOMAIN
@@ -125,6 +126,24 @@ async def wait_until(predicate: Callable[[], bool], timeout: float = 5.0, interv
 async def settle(delay: float = 0.05) -> None:
     """Let queued callbacks run (short real-time sleep)."""
     await asyncio.sleep(delay)
+
+
+def record_states(hass: HomeAssistant, *entity_ids: str) -> dict[str, list[str]]:
+    """Record every state an entity takes from now on (the subscription lives as long as the test's hass).
+
+    Lets a test assert that a transient state (e.g. ``unavailable`` during an outage) occurred without
+    racing the reconnect that follows it.
+    """
+    history: dict[str, list[str]] = {eid: [] for eid in entity_ids}
+
+    @callback
+    def _on_change(event: Any) -> None:
+        new = event.data["new_state"]
+        if new is not None:
+            history[event.data["entity_id"]].append(new.state)
+
+    async_track_state_change_event(hass, list(entity_ids), _on_change)
+    return history
 
 
 SetupIntegration = Callable[[], Awaitable[GaggiMateCoordinator]]

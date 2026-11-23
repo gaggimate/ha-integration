@@ -14,7 +14,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.gaggimate.const import DOMAIN, SERVICE_TRIM_SHOT_HISTORY
 
-from .conftest import SetupIntegration, settle, wait_until
+from .conftest import SetupIntegration, record_states, settle, wait_until
 from .fake_server import FakeGaggiMate, load_json
 
 TEMP_SENSOR = "sensor.gaggimate_test_current_temperature"
@@ -143,12 +143,14 @@ async def test_unavailable_after_timeout_and_reconnect_restores(
         coordinator = await setup_integration()
         assert hass.states.get(TEMP_SENSOR).state == "93.4"
 
+        switch = "switch.gaggimate_test_machine_active"
+        history = record_states(hass, TEMP_SENSOR, switch)
         fake_gaggimate.keepalive = False  # firmware goes silent
-        await wait_until(lambda: not coordinator.available, timeout=5)
-        # the watchdog marked everything unavailable (observed at that moment, before the
-        # reconnect re-sends the initial frames)
-        assert hass.states.get(TEMP_SENSOR).state == STATE_UNAVAILABLE
-        assert hass.states.get("switch.gaggimate_test_machine_active").state == STATE_UNAVAILABLE
+        # the watchdog marks everything unavailable; the reconnect may already have restored
+        # the state by the time we look, so assert on the recorded history
+        await wait_until(
+            lambda: STATE_UNAVAILABLE in history[TEMP_SENSOR] and STATE_UNAVAILABLE in history[switch], timeout=5
+        )
 
         # firmware talks again; the coordinator closed the socket itself and reconnects
         # (fast delay patched in conftest)
