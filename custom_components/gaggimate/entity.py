@@ -77,6 +77,35 @@ def flag_is_set(key: str) -> GateFn:
     return lambda data: int_flag(data, key) is True
 
 
+def _gate_passes(description: EntityDescription, data: dict[str, Any], failed_gates: set[str]) -> bool:
+    """Return whether the description's ``supported_fn`` accepts the data (no gate means supported)."""
+    supported_fn = getattr(description, "supported_fn", None)
+    if supported_fn is None:
+        return True
+    try:
+        return bool(supported_fn(data))
+    except Exception:  # noqa: BLE001 - a bad gate must not break the update loop
+        # Log once per key, then DEBUG (the gate runs on every update)
+        level = logging.DEBUG if description.key in failed_gates else logging.ERROR
+        failed_gates.add(description.key)
+        _LOGGER.log(level, "Gate for %s failed", description.key, exc_info=True)
+        return False
+
+
+def _create_entity(
+    coordinator: GaggiMateCoordinator,
+    entry: ConfigEntry,
+    entity_cls: Callable[[GaggiMateCoordinator, ConfigEntry, Any], Any],
+    description: EntityDescription,
+) -> Any | None:
+    """Create one entity, or return None (logged) if its construction fails."""
+    try:
+        return entity_cls(coordinator, entry, description)
+    except Exception:  # noqa: BLE001 - must not escape the coordinator listener
+        _LOGGER.exception("Failed to create entity %s", description.key)
+        return None
+
+
 @callback
 def async_setup_gated(
     coordinator: GaggiMateCoordinator,
@@ -102,23 +131,13 @@ def async_setup_gated(
         for description in descriptions:
             if description.key in added:
                 continue
-            supported_fn = getattr(description, "supported_fn", None)
-            try:
-                supported = supported_fn is None or bool(supported_fn(data))
-            except Exception:  # noqa: BLE001 - a bad gate must not break the update loop
-                # Log once per key, then DEBUG (the gate runs on every update)
-                level = logging.DEBUG if description.key in failed_gates else logging.ERROR
-                failed_gates.add(description.key)
-                _LOGGER.log(level, "Gate for %s failed", description.key, exc_info=True)
+            if not _gate_passes(description, data, failed_gates):
                 continue
-            if supported:
-                try:
-                    entity = entity_cls(coordinator, entry, description)
-                except Exception:  # noqa: BLE001 - must not escape the coordinator listener
-                    _LOGGER.exception("Failed to create entity %s", description.key)
-                    continue
-                added.add(description.key)
-                new_entities.append(entity)
+            entity = _create_entity(coordinator, entry, entity_cls, description)
+            if entity is None:
+                continue
+            added.add(description.key)
+            new_entities.append(entity)
         if new_entities:
             async_add_entities(new_entities)
 
