@@ -7,7 +7,7 @@ import logging
 import uuid
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, NamedTuple
 from contextlib import suppress
 
 import aiohttp
@@ -82,6 +82,24 @@ def other_process_running(data: dict[str, Any]) -> bool:
     """True while a process other than the grind is active (a brew, flush, steam or water)."""
     process = data.get("process")
     return isinstance(process, dict) and process.get("a") == 1 and process.get("s") != "grind"
+
+
+class _GrindTarget(NamedTuple):
+    """How one grind target kind maps onto the status keys, step size and allowed range."""
+
+    by_weight: bool
+    key: str
+    scale: float
+    step: float
+    low: float
+    high: float
+
+
+# Only the range constants are bound here; the GRIND_TARGET_* timings are read at call time
+_GRIND_TARGETS = {
+    "duration": _GrindTarget(False, "gtd", 1000.0, 1.0, GRIND_DURATION_MIN_S, GRIND_DURATION_MAX_S),
+    "weight": _GrindTarget(True, "gtv", 1.0, 0.5, GRIND_WEIGHT_MIN_G, GRIND_WEIGHT_MAX_G),
+}
 
 
 def _ws_timeout(seconds: float) -> Any:
@@ -720,67 +738,73 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         has not moved for GRIND_TARGET_STALL seconds; the whole call is capped by
         GRIND_TARGET_TIMEOUT. Relative stepping can race with another client changing the target.
         """
-        if kind == "duration":
-            by_weight, key, scale, step = False, "gtd", 1000.0, 1.0
-            low, high = GRIND_DURATION_MIN_S, GRIND_DURATION_MAX_S
-        elif kind == "weight":
-            by_weight, key, scale, step = True, "gtv", 1.0, 0.5
-            low, high = GRIND_WEIGHT_MIN_G, GRIND_WEIGHT_MAX_G
-        else:
+        spec = _GRIND_TARGETS.get(kind)
+        if spec is None:
             raise ValueError(f"Unknown grind target kind: {kind}")
-
-        def current() -> float | None:
-            raw = (self.data or {}).get(key)
-            if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-                return None
-            return float(raw) / scale
-
-        def check_active() -> None:
-            if int_flag(self.data or {}, "gt") != by_weight:
-                raise UpdateFailed(f"Grind target is not set to {kind}")
 
         # One change at a time (shared by both numbers); the start value is read under the lock
         async with self._grind_target_lock:
-            check_active()
-            start = current()
+            self._require_grind_type(spec.by_weight, kind)
+            start = self._grind_value(spec.key, spec.scale)
             if start is None:
                 raise UpdateFailed(f"Grind target {kind} unknown")
 
-            target = min(max(float(value), low), high)
-            steps = int(round((target - start) / step))
+            target = min(max(float(value), spec.low), spec.high)
+            steps = int(round((target - start) / spec.step))
             if steps == 0:
                 return
-            end = start + steps * step
-            raising = steps > 0
-            msg_type = MSG_TYPE_GRIND_TARGET_RAISE if raising else MSG_TYPE_GRIND_TARGET_LOWER
+            end = start + steps * spec.step
 
             try:
                 async with asyncio.timeout(GRIND_TARGET_TIMEOUT):
-                    observed = start
-                    moved_at = time.monotonic()
-                    reached = False
-                    for _ in range(abs(steps)):
-                        check_active()
-                        now_value = current()
-                        if now_value is not None:
-                            if now_value != observed:
-                                observed, moved_at = now_value, time.monotonic()
-                            # Reported value lags the messages in flight, so it never overshoots
-                            if (raising and now_value >= end) or (not raising and now_value <= end):
-                                reached = True
-                                break
-                        if time.monotonic() - moved_at > GRIND_TARGET_STALL:
-                            raise UpdateFailed("Grind target stopped moving")
-                        await self.send_message({"tp": msg_type})
-                        await asyncio.sleep(GRIND_TARGET_MESSAGE_DELAY)
+                    reached = await self._step_grind_target(spec, kind, start, end, steps)
                     # Let the reported value settle so the next call starts from a fresh one
                     if not reached:
-                        deadline = time.monotonic() + GRIND_TARGET_SETTLE
-                        while current() != end and time.monotonic() < deadline:
-                            check_active()
-                            await asyncio.sleep(GRIND_TARGET_MESSAGE_DELAY)
+                        await self._settle_grind_target(spec, kind, end)
             except TimeoutError as err:
                 raise UpdateFailed("Timed out setting the grind target") from err
+
+    def _grind_value(self, key: str, scale: float) -> float | None:
+        """The reported grind target in user units, or None when absent or not numeric."""
+        raw = (self.data or {}).get(key)
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return None
+        return float(raw) / scale
+
+    def _require_grind_type(self, by_weight: bool, kind: str) -> None:
+        """Raise unless the device's grind target type matches the requested kind."""
+        if int_flag(self.data or {}, "gt") != by_weight:
+            raise UpdateFailed(f"Grind target is not set to {kind}")
+
+    async def _step_grind_target(
+        self, spec: _GrindTarget, kind: str, start: float, end: float, steps: int
+    ) -> bool:
+        """Send raise/lower messages until the reported target reaches `end`; True when it did."""
+        raising = steps > 0
+        msg_type = MSG_TYPE_GRIND_TARGET_RAISE if raising else MSG_TYPE_GRIND_TARGET_LOWER
+        observed = start
+        moved_at = time.monotonic()
+        for _ in range(abs(steps)):
+            self._require_grind_type(spec.by_weight, kind)
+            now_value = self._grind_value(spec.key, spec.scale)
+            if now_value is not None:
+                if now_value != observed:
+                    observed, moved_at = now_value, time.monotonic()
+                # Reported value lags the messages in flight, so it never overshoots
+                if (raising and now_value >= end) or (not raising and now_value <= end):
+                    return True
+            if time.monotonic() - moved_at > GRIND_TARGET_STALL:
+                raise UpdateFailed("Grind target stopped moving")
+            await self.send_message({"tp": msg_type})
+            await asyncio.sleep(GRIND_TARGET_MESSAGE_DELAY)
+        return False
+
+    async def _settle_grind_target(self, spec: _GrindTarget, kind: str, end: float) -> None:
+        """Wait (up to GRIND_TARGET_SETTLE) for the reported target to equal `end`."""
+        deadline = time.monotonic() + GRIND_TARGET_SETTLE
+        while self._grind_value(spec.key, spec.scale) != end and time.monotonic() < deadline:
+            self._require_grind_type(spec.by_weight, kind)
+            await asyncio.sleep(GRIND_TARGET_MESSAGE_DELAY)
 
     async def request_profiles_list(self) -> None:
         try:
