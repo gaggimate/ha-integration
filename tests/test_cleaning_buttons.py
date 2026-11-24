@@ -49,6 +49,8 @@ ALL_KEYS = tuple(CLEANING)
 EXISTING_BUTTON_KEYS = {
     "brew_start", "brew_stop", "flush", "flush_stop", "process_clear", "brew_confirm", "brew_confirm_cancel",
 }
+# chg003 step 3: the firmware "Check for Updates" button (gated on `up`, present in every fixture)
+UPDATE_CHECK_BUTTON_KEYS = {"check_for_updates"}
 
 
 # -- helpers -----------------------------------------------------------------------------------------
@@ -500,7 +502,7 @@ async def test_existing_buttons_unchanged(
         for e in er.async_entries_for_config_entry(er.async_get(hass), mock_config_entry.entry_id)
         if e.domain == "button"
     }
-    assert buttons == EXISTING_BUTTON_KEYS | set(ALL_KEYS)
+    assert buttons == EXISTING_BUTTON_KEYS | UPDATE_CHECK_BUTTON_KEYS | set(ALL_KEYS)
     for key in EXISTING_BUTTON_KEYS:
         assert _entry(hass, key).disabled_by is None, key
 

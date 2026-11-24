@@ -15,6 +15,12 @@ GaggiMate firmware (`WebSocketHandler.cpp`, `publishState()` / `publishTelemetry
   `tof_tank` is unchanged: it is kept as found (`htl` true with `tlo` null) and is not a realistic machine.
 * `events.json`: non-status `evt:*` frames by name.
 * `profiles_list.json`, `ota_settings.json`: `{"response": <frame>}` answers to the matching requests.
+  `ota_settings.json` response has `channel` ("latest") and `updating` (false) like current firmware;
+  its extra `variations` key holds field overrides for update-available cases
+  (`display_update_available`, `both_update_available`, `nightly_update_available`) that tests merge
+  into the response.
+* The fake server also emulates the firmware update flow (`req:ota-start`, `evt:ota-progress`,
+  channel change / update check via `req:ota-settings`); see the OTA block in `fake_server.py`.
 
 To replace synthetic frames with real ones, run a recording against a real machine:
 

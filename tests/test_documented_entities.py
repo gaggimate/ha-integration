@@ -31,6 +31,7 @@ SECTION_PLATFORM: dict[str, str] = {
     "Numbers": "number",
     "Selects": "select",
     "Events": "event",
+    "Updates": "update",
 }
 ENABLED_COLUMN = "Enabled by default"
 
@@ -164,7 +165,8 @@ def test_readme_parser_is_not_vacuous() -> None:
     documented, problems = _parse_readme()
     assert not problems
     platforms = {platform for platform, _ in documented}
-    assert platforms == {"sensor", "binary_sensor", "switch", "select", "number", "button", "event"}
+    assert platforms == {"sensor", "binary_sensor", "switch", "select", "number", "button", "event", "update"}
+    assert ("update", "Display Firmware Update") in documented
     assert ("sensor", "Current Temperature") in documented
     assert ("event", "Shot Events") in documented
     assert ("button", "Start Backflush") in documented

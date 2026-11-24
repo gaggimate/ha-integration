@@ -25,6 +25,8 @@ EXPECTED_KEYS = {
     # other platforms
     "power", "mode_select", "profile_select", "brew_start", "brew_stop", "flush",
     "target_temperature_setpoint",
+    # chg003 step 3: Check for Updates button and Update Channel select (gated on `up`, enabled by default)
+    "check_for_updates", "update_channel",
 }
 
 # Step 5 diagnostics. Present whenever the firmware sends the key (sys, lnk, lat, rtx, up, sbat, scaleSource).
@@ -63,6 +65,9 @@ CLEANING_BUTTON_KEYS = {"backflush_start", "backflush_complete", "descaling_star
 # Step 14: two always-on event entities.
 EVENT_KEYS = {"shot_events", "machine_events"}
 
+# chg003 step 2: three update entities, gated on `up` (present in every fixture), enabled by default.
+UPDATE_KEYS = {"display_firmware_update", "controller_firmware_update", "firmware_update"}
+
 # Disabled by default in the entity registry (entity_registry_enabled_default=False).
 DISABLED_BY_DEFAULT = {
     "link_rssi", "link_latency", "link_retransmits", "puck_resistance", "target_flow",
@@ -98,6 +103,11 @@ PLATFORM_OF = {
     "descaling_complete": "button",
     "shot_events": "event",
     "machine_events": "event",
+    "display_firmware_update": "update",
+    "controller_firmware_update": "update",
+    "firmware_update": "update",
+    "check_for_updates": "button",
+    "update_channel": "select",
 }
 
 
@@ -142,7 +152,7 @@ async def test_all_current_entities_created(
     fake_gaggimate.state, fake_gaggimate.telemetry = data["state"], data["telemetry"]
     await setup_integration()
 
-    expected_keys = EXPECTED_KEYS | extra_keys
+    expected_keys = EXPECTED_KEYS | UPDATE_KEYS | extra_keys
     expected_unique_ids = {f"{HOST}_{key}" for key in expected_keys}
     entities = _entry_entities(hass, mock_config_entry)
     assert {e.unique_id for e in entities} == expected_unique_ids

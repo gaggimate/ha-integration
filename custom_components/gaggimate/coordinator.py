@@ -24,6 +24,7 @@ from .const import (
     MSG_TYPE_CHANGE_GRIND_TARGET,
     MSG_TYPE_EVENT_BREW_CONFIRM,
     MSG_TYPE_EVENT_BREW_CONFIRM_CANCEL,
+    MSG_TYPE_EVENT_OTA_PROGRESS,
     MSG_TYPE_EVENT_PREFIX,
     MSG_TYPE_FLUSH_START,
     MSG_TYPE_FLUSH_STOP,
@@ -34,6 +35,7 @@ from .const import (
     MSG_TYPE_MODE_CHANGE,
     MSG_TYPE_OTA_SETTINGS,
     MSG_TYPE_OTA_SETTINGS_RESPONSE,
+    MSG_TYPE_OTA_START,
     MSG_TYPE_PROCESS_ACTIVATE,
     MSG_TYPE_PROCESS_CLEAR,
     MSG_TYPE_PROCESS_DEACTIVATE,
@@ -46,7 +48,17 @@ from .const import (
     MSG_TYPE_TEMP_LOWER,
     MSG_TYPE_TEMP_RAISE,
     MachineMode,
+    OTA_CHANNELS,
+    OTA_COMPONENTS,
+    OTA_PHASE_CONTROLLER,
+    OTA_PHASE_DISPLAY,
+    OTA_PHASE_DISPLAY_FS,
+    OTA_PHASE_FAILED,
+    OTA_PHASE_FINISHED,
+    OTA_PHASE_IDLE,
     OTA_REFRESH_DELAY,
+    OTA_START_PENDING,
+    OTA_WATCHDOG_GRACE,
     GRIND_DURATION_MAX_S,
     GRIND_DURATION_MIN_S,
     GRIND_TARGET_MESSAGE_DELAY,
@@ -137,6 +149,14 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         self._ota_settings: dict[str, Any] = {}
         self._event_listeners: list[Callable[[str, dict[str, Any]], None]] = []
         self._ota_refresh_task: asyncio.Task | None = None
+        # Firmware update run: last evt:ota-progress phase/percent, whether a flashing phase
+        # (1/2/3) was seen, when an install was sent and until when watchdog silence is tolerated
+        # (the last two are time.monotonic() values)
+        self._ota_phase: int | None = None
+        self._ota_percent: int | None = None
+        self._ota_ran = False
+        self._ota_start_sent_at: float | None = None
+        self._ota_grace_until: float | None = None
         # Last steam toggle sent: (requested state, monotonic time); see set_steam_heater
         self._steam_pending: tuple[bool, float] | None = None
         self._grind_target_lock = asyncio.Lock()  # one grind target change at a time
@@ -286,8 +306,11 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         finally:
             # A confirmation cannot be answered over a dead link
             self._clear_brew_confirm(notify=False)
+            ota_changed = self._reset_ota_state()
             if self._available:
                 self._available = False
+                self.async_update_listeners()
+            elif ota_changed:
                 self.async_update_listeners()
             if self._ws:
                 with suppress(Exception):
@@ -338,6 +361,13 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         self._reconnect_attempt = 0
         self._last_status_time = time.monotonic()
 
+        if self._ota_phase == OTA_PHASE_FINISHED:
+            # Still sending status after "finished": the display did not reboot (nothing to flash)
+            self._ota_phase = None
+            self._ota_percent = None
+            self._ota_ran = False
+            self._clear_ota_updating()
+
         if not self._available:
             _LOGGER.info("GaggiMate became available")
             self._available = True
@@ -368,12 +398,98 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             self._set_brew_confirm(message.get("warn"))
         elif msg_type == MSG_TYPE_EVENT_BREW_CONFIRM_CANCEL:
             self._clear_brew_confirm()
+        elif msg_type == MSG_TYPE_EVENT_OTA_PROGRESS:
+            self._handle_ota_progress(message)
         self._dispatch_event(msg_type, message)
+
+    def _handle_ota_progress(self, message: dict[str, Any]) -> None:
+        """Track the update phase and progress; malformed frames are ignored."""
+        phase = message.get("phase")
+        if isinstance(phase, bool) or not isinstance(phase, int) or not 0 <= phase <= OTA_PHASE_FAILED:
+            _LOGGER.debug("Ignoring malformed OTA progress: %s", message)
+            return
+        progress = message.get("progress")
+        if isinstance(progress, bool) or not isinstance(progress, int):
+            progress = 0
+        progress = max(0, min(100, progress))
+
+        now = time.monotonic()
+        if phase in (OTA_PHASE_DISPLAY, OTA_PHASE_DISPLAY_FS, OTA_PHASE_CONTROLLER):
+            changed = (self._ota_phase, self._ota_percent) != (phase, progress)
+            self._ota_phase = phase
+            self._ota_percent = progress
+            self._ota_ran = True
+            self._ota_grace_until = now + OTA_WATCHDOG_GRACE
+            self._ota_start_sent_at = None
+            if changed:
+                self.async_update_listeners()
+            return
+
+        # Finished (4), failed (5) or idle (0): the run is over. Give the status stream a fresh
+        # window (a successful update reboots the display, a no-op or failure does not).
+        if phase == OTA_PHASE_FINISHED:
+            self._ota_phase = phase
+            self._ota_percent = 100
+        else:
+            self._ota_phase = phase
+            self._ota_percent = None
+            self._ota_ran = False
+        self._ota_grace_until = None
+        self._ota_start_sent_at = None
+        self._clear_ota_updating()
+        self._last_status_time = now
+        self._schedule_ota_refresh()  # the settings still say updating until re-read
+        self.async_update_listeners()
 
     def _handle_ota_response(self, message: dict[str, Any]) -> None:
         """Store the OTA settings response."""
         self._ota_settings = message
+        if message.get("updating") is True:
+            if self._ota_phase in (None, OTA_PHASE_IDLE, OTA_PHASE_FINISHED, OTA_PHASE_FAILED):
+                # A new run began elsewhere (web UI, display): forget the old one
+                self._ota_phase = None
+                self._ota_percent = None
+                self._ota_ran = False
+            self._ota_grace_until = time.monotonic() + OTA_WATCHDOG_GRACE
+        elif self._ota_phase is None and not self._start_pending():
+            # Nothing is running: do not keep the watchdog blind
+            self._ota_grace_until = None
         self.async_update_listeners()
+
+    def _start_pending(self) -> bool:
+        """True while an install request was sent a moment ago and no progress arrived yet."""
+        sent_at = self._ota_start_sent_at
+        return sent_at is not None and time.monotonic() - sent_at < OTA_START_PENDING
+
+    def _clear_ota_updating(self) -> bool:
+        """Drop a stale updating=true from the stored settings; True if it was set.
+
+        The firmware's last broadcast still says updating after a run ended; a later
+        broadcast with updating=true starts a new run via _handle_ota_response.
+        """
+        if self._ota_settings.get("updating") is not True:
+            return False
+        self._ota_settings = {**self._ota_settings, "updating": False}
+        return True
+
+    def _reset_ota_state(self) -> bool:
+        """Forget the update run (the connection is gone); True if anything changed."""
+        changed = (
+            self._ota_phase is not None
+            or self._ota_percent is not None
+            or self._ota_ran
+            or self._ota_start_sent_at is not None
+            or self._ota_grace_until is not None
+        )
+        self._ota_phase = None
+        self._ota_percent = None
+        self._ota_ran = False
+        self._ota_start_sent_at = None
+        self._ota_grace_until = None
+        if self._ota_settings.get("updating") is True:
+            self._ota_settings = {**self._ota_settings, "updating": False}
+            changed = True
+        return changed
 
     def _handle_profiles_response(self, message: dict[str, Any]) -> None:
         """Store the profile list; an error or malformed list keeps the current one."""
@@ -524,6 +640,10 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
             return
 
         elapsed = time.monotonic() - self._last_status_time
+
+        # The display is busy flashing and sends no status: tolerate silence during an update
+        if self._ota_grace_until is not None and time.monotonic() < self._ota_grace_until:
+            return
 
         if elapsed > WS_UNAVAILABLE_TIMEOUT:
             await self._mark_stale(elapsed)
@@ -923,7 +1043,83 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
     @property
     def ota_settings(self) -> dict[str, Any]:
         return self._ota_settings
-        
+
+    @property
+    def ota_phase(self) -> int | None:
+        """Last evt:ota-progress phase of the current run (None when none was seen)."""
+        return self._ota_phase
+
+    @property
+    def ota_percent(self) -> int | None:
+        """Progress (0..100) of the current phase."""
+        return self._ota_percent
+
+    @property
+    def ota_channel(self) -> str | None:
+        """The update channel key ("latest" or "nightly"), None when unknown."""
+        channel = self._ota_settings.get("channel")
+        if isinstance(channel, str) and channel in OTA_CHANNELS:
+            return channel
+        return None
+
+    @property
+    def ota_updating(self) -> bool:
+        """True while a firmware update runs (or was just requested)."""
+        sent_at = self._ota_start_sent_at
+        if sent_at is not None and time.monotonic() - sent_at < OTA_START_PENDING:
+            return True
+        phase = self._ota_phase
+        if phase in (OTA_PHASE_DISPLAY, OTA_PHASE_DISPLAY_FS, OTA_PHASE_CONTROLLER):
+            return True
+        if phase == OTA_PHASE_FINISHED:
+            return self._ota_ran
+        return self._ota_settings.get("updating") is True
+
+    async def start_ota(self, component: str) -> None:
+        """Ask the firmware to install the display, the controller or both.
+
+        The firmware sends no response: progress arrives as evt:ota-progress and the
+        display always reboots after flashing. Nothing is checked about the machine state.
+        """
+        if component not in OTA_COMPONENTS:
+            raise ValueError(f"Unknown update component: {component}")
+        if self.ota_updating:
+            raise UpdateFailed("A firmware update is already running")
+
+        # Record before the await so a concurrent call and the watchdog see it
+        previous = (self._ota_start_sent_at, self._ota_grace_until)
+        now = time.monotonic()
+        self._ota_start_sent_at = now
+        self._ota_grace_until = now + OTA_WATCHDOG_GRACE
+        try:
+            await self.send_message({"tp": MSG_TYPE_OTA_START, "cp": component})
+        except BaseException:
+            # Includes cancellation: an install that was never sent must not count as running
+            self._ota_start_sent_at, self._ota_grace_until = previous
+            raise
+        await self.request_ota_settings()
+
+    async def check_for_updates(self) -> None:
+        """Ask the firmware to look for a new release on the current channel.
+
+        The firmware answers with the old data at once; the result of the check
+        arrives later as another res:ota-settings broadcast.
+        """
+        if self.ota_updating:
+            raise UpdateFailed("A firmware update is already running")
+        channel = self.ota_channel
+        if channel is None:
+            raise UpdateFailed("Update channel unknown")
+        await self.send_message({"tp": MSG_TYPE_OTA_SETTINGS, "update": True, "channel": channel})
+
+    async def set_ota_channel(self, channel: str) -> None:
+        """Switch the update channel (the firmware also starts a new check)."""
+        if channel not in OTA_CHANNELS:
+            raise ValueError(f"Unknown update channel: {channel}")
+        if self.ota_updating:
+            raise UpdateFailed("A firmware update is already running")
+        await self.send_message({"tp": MSG_TYPE_OTA_SETTINGS, "update": True, "channel": channel})
+
     @property
     def available(self) -> bool:
         # Return whether the machine is available.

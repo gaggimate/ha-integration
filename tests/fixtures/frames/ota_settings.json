@@ -3,10 +3,29 @@
   "response": {
     "tp": "res:ota-settings",
     "hardware": "GaggiMate Pro",
+    "channel": "latest",
+    "updating": false,
     "displayVersion": "v1.7.0",
     "controllerVersion": "v1.7.0",
     "latestVersion": "v1.7.0",
     "displayUpdateAvailable": false,
     "controllerUpdateAvailable": false
+  },
+  "variations": {
+    "display_update_available": {
+      "latestVersion": "v1.8.0",
+      "displayUpdateAvailable": true
+    },
+    "both_update_available": {
+      "latestVersion": "v1.8.0",
+      "displayUpdateAvailable": true,
+      "controllerUpdateAvailable": true
+    },
+    "nightly_update_available": {
+      "channel": "nightly",
+      "latestVersion": "nightly-20261123",
+      "displayUpdateAvailable": true,
+      "controllerUpdateAvailable": true
+    }
   }
 }

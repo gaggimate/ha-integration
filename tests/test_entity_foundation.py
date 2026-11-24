@@ -300,7 +300,9 @@ async def test_number_platform_unchanged_and_reload_no_duplicates(
     # + 1 step-11 Grind switch (gact present; no Grind By Weight as bta is 0)
     # + 1 step-12 Grind Target Duration number (gtd present; no Grind Target Weight as bta is 0)
     # + 2 step-14 always-on event entities (shot_events, machine_events)
-    assert total == 54
+    # + 3 chg003 step-2 update entities (display/controller/both firmware update; `up` is in every fixture)
+    # + 2 chg003 step-3 entities (Check for Updates button, Update Channel select)
+    assert total == 59
 
     for _ in range(2):
         assert await hass.config_entries.async_reload(mock_config_entry.entry_id)
@@ -320,8 +322,9 @@ async def test_number_platform_unchanged_and_reload_no_duplicates(
         )
         assert len(er.async_entries_for_config_entry(registry, mock_config_entry.entry_id)) == total
         # the new coordinator holds a bounded number of listeners (no accumulation across reloads)
-        # (+3: one gate listener per gated platform setup; step 11 added a second one on switch)
-        assert len(coordinator._listeners) <= total + 3
+        # (+8: one gate listener per async_setup_gated call: binary_sensor, button, number, select,
+        # sensor, switch (steam heater), switch (grind), update; a reload must not add more)
+        assert len(coordinator._listeners) <= total + 8
 
 
 async def test_reload_does_not_leak_gate_listener(

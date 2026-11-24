@@ -9,6 +9,7 @@ from typing import Any
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -19,6 +20,7 @@ from .const import (
     UNIQUE_ID_BREW_CONFIRM_CANCEL,
     UNIQUE_ID_BREW_START,
     UNIQUE_ID_BREW_STOP,
+    UNIQUE_ID_CHECK_UPDATES,
     UNIQUE_ID_DESCALING_COMPLETE,
     UNIQUE_ID_DESCALING_START,
     UNIQUE_ID_FLUSH,
@@ -27,7 +29,7 @@ from .const import (
     UNIQUE_ID_TARE_SCALE,
 )
 from .coordinator import GaggiMateCoordinator
-from .entity import async_setup_gated, cap, has_warning_key
+from .entity import async_setup_gated, cap, has_key, has_warning_key
 from .sensor import GaggiMateEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -110,6 +112,16 @@ BUTTONS: tuple[GaggiMateButtonEntityDescription, ...] = (
         icon="mdi:check-circle-outline",
         press_fn=lambda coordinator: coordinator.complete_cleaning("descaling"),
         supported_fn=has_warning_key("descaling"),
+    ),
+    GaggiMateButtonEntityDescription(
+        key=UNIQUE_ID_CHECK_UPDATES,
+        name="Check for Updates",
+        icon="mdi:cloud-search-outline",
+        press_fn=lambda coordinator: coordinator.check_for_updates(),
+        supported_fn=has_key("up"),
+        # Not while flashing: the firmware ignores the check during an update anyway
+        available_fn=lambda coordinator: not coordinator.ota_updating,
+        entity_category=EntityCategory.CONFIG,
     ),
 )
 

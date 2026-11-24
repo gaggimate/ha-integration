@@ -19,6 +19,7 @@ Control and monitor your GaggiMate smart espresso machine upgrade system from Ho
 - Scale weight from a BLE scale or hardware scale
 - Shot and machine events for automations
 - Controller state, link health and firmware update status
+- Firmware update check, Stable or Nightly channel, and display and/or controller install
 - Entities appear as the machine reports its capabilities
 - Automatic WebSocket reconnection
 - Service to trim stored shot history

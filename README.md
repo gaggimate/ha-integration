@@ -30,6 +30,7 @@ Control and monitor your GaggiMate-equipped espresso machine directly from Home 
 - ⚖️ **Scale Integration** - Weight from a connected BLE scale or hardware scale, with scale battery and the active weight source
 - 🔔 **Events** - Shot saved and shot finished events, and machine events, for automations
 - 🩺 **Diagnostics** - Controller state and link health, warnings, and firmware update status
+- ⬆️ **Firmware Updates** - Check for updates, choose the Stable or Nightly channel, and install display and/or controller firmware (see [Updates](#updates))
 - 🔄 **Automatic Entity Setup** - Entities appear as the machine reports its capabilities (see [Capability detection](#capability-detection))
 - 🏠 **Native HA Integration** - Uses standard Home Assistant entity types for seamless automation
 - 🧹 **Shot History Maintenance** - Built-in service to trim stored shots and keep only the newest entries
@@ -169,6 +170,7 @@ mode: single
 | Mark Backflush Done | Record a backflush as done: resets the backflush schedule and shot count without running the cycle | Firmware reports the backflush warning | Yes |
 | Start Descaling | Select the descaling profile and start it in brew mode (runs the pump and heater). Present whether or not a descaling is due. See [Cleaning](#cleaning) | Firmware reports the descaling warning | No |
 | Mark Descaling Done | Record a descaling as done: resets the descaling schedule and shot count without running the cycle | Firmware reports the descaling warning | Yes |
+| Check for Updates | Ask the machine to check for a new firmware release on the current update channel. The result arrives later and updates the Updates entities; not available while an update runs | `up` reported | Yes |
 
 ### Switches
 
@@ -217,6 +219,31 @@ The grind target numbers move the machine's target with repeated raise/lower mes
 |--------|-------------|------------|--------------------|
 | Mode | Choose machine operating mode (dual-boiler machines offer Standby, Brew and Grind only) | Always | Yes |
 | Profile | Choose brewing profile | Always | Yes |
+| Update Channel | Firmware update channel: Stable (latest release) or Nightly (pre-release builds, beta). Not available while an update runs | `up` reported | Yes |
+
+### Updates
+
+| Entity | Description | Shown when | Enabled by default |
+|--------|-------------|------------|--------------------|
+| Display Firmware Update | Display firmware version, update availability and install | `up` reported | Yes |
+| Controller Firmware Update | Controller firmware version, update availability and install | `up` reported | Yes |
+| Display and Controller Firmware Update | Installs whatever the machine reports as outdated, on both parts | `up` reported | Yes |
+
+The Display Firmware Update and Controller Firmware Update entities show the installed version of their part and whether a newer release is available. The Display and Controller Firmware Update entity installs whichever part the machine reports as outdated, and shows a combined version when the two parts differ. The controller is flashed first, then the display.
+
+**Check for Updates** asks the machine to look for a new release on the channel it is currently set to. The result is not immediate: it arrives later and updates the entities above. The firmware skips the check while another process (such as a brew) is running. The button and the Update Channel select are not available while an update runs.
+
+**Update Channel** chooses which releases the machine checks: Stable (latest release) or Nightly. The select shows the channel the machine reports, so it changes once the machine confirms the new channel.
+
+**Warning:** Nightly is a beta channel. Pre-release builds may contain bugs. Installing an update while the channel is Nightly runs without a confirmation prompt. Stay on Stable unless you want to test pre-releases.
+
+Before you press install:
+
+- There is no way to cancel an update once it has started.
+- Installing is not blocked while the machine is brewing. Do not install during a shot: the firmware puts the machine in standby when the update starts.
+- Any install that flashes firmware reboots the display. The display reboots, so the integration's connection to the machine drops and the entities become unavailable. This is expected, and the integration reconnects by itself. During the update the other entities keep their last values.
+- All three update entities show as in progress while an update runs, whichever entity or client started it, because the integration does not track that. Each entity shows a percentage only while its own part is being flashed (the Display and Controller Firmware Update entity shows whichever part is running); the controller is flashed first, then the display, and the percentage restarts when the second part starts.
+- If nothing needs updating, the install does nothing.
 
 ### Cleaning
 
@@ -596,6 +623,14 @@ An example Home Assistant dashboard is available in the [`examples/dashboard`](e
 **Problem**: Integration keeps disconnecting
 - Consider setting a static IP for your GaggiMate
 - Check for WiFi signal strength issues
+
+**Problem**: Connection drops and entities are unavailable after a firmware update
+- This is expected when an install flashes firmware: the display reboots and the connection drops. Wait for the machine to restart; the integration reconnects by itself and the entities update again
+- If the machine stays unavailable after it has restarted, follow the steps above for connection problems
+
+**Problem**: Check for Updates does not show a new version
+- The firmware skips the update check while another process (such as a brew) is running
+- The firmware runs the deferred check by itself once the machine is idle; the result updates the Updates entities. If nothing shows after that, press Check for Updates again
 
 ### Entity Issues
 

@@ -72,6 +72,31 @@ class FakeGaggiMate:
         # ``cleaning_delay`` postpones every cleaning answer by that many seconds.
         self.cleaning_results: dict[str, dict[str, Any] | None] = {}
         self.cleaning_delay = 0.0
+        # Firmware update emulation (see the "OTA helpers" below).
+        # req:ota-settings with update:true + channel stores the channel (anything but "latest" ->
+        # "nightly") and broadcasts the OLD data; if ``ota_check_result`` is set, those fields are merged
+        # and broadcast again ``ota_check_delay`` seconds later (the finished check).
+        # req:ota-start records the request, sets updating=true, broadcasts, then pushes ``ota_script``
+        # (phase, progress) frames as evt:ota-progress, ``ota_frame_delay`` apart, and ends per ``ota_mode``:
+        #   "reboot": phase 4, then (after ``ota_reboot_delay``) installed versions := latestVersion,
+        #             updating=false, every socket closed; new connections are refused for
+        #             ``ota_downtime`` seconds
+        #   "noop":   phase 4 only (nothing to flash), updating=false, no drop (script is skipped)
+        #   "fail":   script, then phase 5, updating=false, no drop
+        #   "hang":   script, then nothing (updating stays true)
+        # ``silence_keepalive`` stops the evt:status keepalive from the start of a run to its end.
+        self.ota_check_result: dict[str, Any] | None = None
+        self.ota_check_delay = 0.05
+        self.ota_script: list[tuple[int, int]] = [(1, 0), (1, 50), (1, 100)]
+        self.ota_frame_delay = 0.02
+        self.ota_mode = "reboot"
+        self.ota_reboot_delay = 0.05
+        self.ota_downtime = 0.0
+        self.silence_keepalive = False
+        self.ota_run_active = False
+        self._ota_task: asyncio.Task | None = None
+        self._check_task: asyncio.Task | None = None
+        self._refuse_until = 0.0
         self.requests: list[dict[str, Any]] = []
         self.connections: list[web.WebSocketResponse] = []
         self.connect_count = 0
@@ -89,6 +114,10 @@ class FakeGaggiMate:
         self._keepalive_task = asyncio.create_task(self._keepalive_loop())
 
     async def stop(self) -> None:
+        for task in (self._ota_task, self._check_task):
+            if task:
+                task.cancel()
+        self._ota_task = self._check_task = None
         if self._grind_frame_task:
             self._grind_frame_task.cancel()
             self._grind_frame_task = None
@@ -131,10 +160,12 @@ class FakeGaggiMate:
     async def _keepalive_loop(self) -> None:
         while True:
             await asyncio.sleep(self.keepalive_interval)
-            if self.keepalive:
+            if self.keepalive and not (self.silence_keepalive and self.ota_run_active):
                 await self.push({"tp": "evt:status"})
 
     async def _ws_handler(self, request: web.Request) -> web.WebSocketResponse:
+        if asyncio.get_running_loop().time() < self._refuse_until:
+            return web.Response(status=503)  # display is rebooting
         ws = web.WebSocketResponse()
         await ws.prepare(request)
         self.connections.append(ws)
@@ -164,7 +195,9 @@ class FakeGaggiMate:
             else:
                 await self._respond(ws, req, "res:profiles:list", profiles=self.profiles)
         elif tp == "req:ota-settings":
-            await ws.send_json(self.ota_settings)
+            await self._handle_ota_settings(ws, req)
+        elif tp == "req:ota-start":
+            self._start_ota(req)
         elif tp == "req:profiles:select":
             if any(p["id"] == req.get("id") for p in self.profiles):
                 await self._respond(ws, req, "res:profiles:select")
@@ -203,6 +236,59 @@ class FakeGaggiMate:
         if self.cleaning_delay:
             await asyncio.sleep(self.cleaning_delay)
         await self._respond(ws, req, f"res:cleaning:{task}:{action}", **fields)
+
+    async def _handle_ota_settings(self, ws: web.WebSocketResponse, req: dict[str, Any]) -> None:
+        if req.get("update") is True and "channel" in req:
+            channel = "latest" if req["channel"] == "latest" else "nightly"
+            self.ota_settings = {**self.ota_settings, "channel": channel}
+            await self.broadcast_ota_settings()  # old data, new channel
+            if self.ota_check_result is not None:
+                self._check_task = asyncio.create_task(self._finish_check())
+        else:
+            await ws.send_json(self.ota_settings)
+
+    async def _finish_check(self) -> None:
+        await asyncio.sleep(self.ota_check_delay)
+        if self.ota_check_result is not None:
+            await self.set_ota_settings(**self.ota_check_result)
+
+    def _start_ota(self, req: dict[str, Any]) -> None:
+        if self.ota_run_active:
+            return
+        self.ota_run_active = True
+        self._ota_task = asyncio.create_task(self._run_ota(req.get("cp")))
+
+    async def _run_ota(self, component: Any) -> None:
+        keep_active = False
+        try:
+            await self.set_ota_settings(updating=True)
+            if self.ota_mode == "noop":
+                await self.push_ota_progress(4, 100)
+                await self.set_ota_settings(updating=False)
+                return
+            for phase, progress in self.ota_script:
+                await self.push_ota_progress(phase, progress)
+                await asyncio.sleep(self.ota_frame_delay)
+            if self.ota_mode == "fail":
+                await self.push_ota_progress(5, 0)
+                await self.set_ota_settings(updating=False)
+            elif self.ota_mode == "reboot":
+                await self.push_ota_progress(4, 100)
+                await asyncio.sleep(self.ota_reboot_delay)
+                latest = self.ota_settings.get("latestVersion")
+                changes: dict[str, Any] = {"updating": False}
+                if component != "controller":
+                    changes.update(displayVersion=latest, displayUpdateAvailable=False)
+                if component != "display":
+                    changes.update(controllerVersion=latest, controllerUpdateAvailable=False)
+                self.ota_settings = {**self.ota_settings, **changes}
+                self._refuse_until = asyncio.get_running_loop().time() + self.ota_downtime
+                await self.drop_connections()
+            else:  # "hang"
+                keep_active = True
+        finally:
+            if not keep_active:
+                self.ota_run_active = False
 
     def _apply_grind_step(self, direction: int) -> None:
         if self.grind_mode == "drop":
@@ -251,6 +337,23 @@ class FakeGaggiMate:
     async def push_telemetry(self, **changes: Any) -> None:
         self.telemetry = {**self.telemetry, **changes}
         await self.push(self.telemetry)
+
+    # -- OTA helpers -------------------------------------------------------
+    async def broadcast_ota_settings(self) -> None:
+        """Broadcast the current res:ota-settings (rid-less, as the firmware does)."""
+        await self.push(self.ota_settings)
+
+    async def set_ota_settings(self, **changes: Any) -> None:
+        """Change fields of the stored OTA settings (e.g. displayUpdateAvailable) and broadcast them."""
+        self.ota_settings = {**self.ota_settings, **changes}
+        await self.broadcast_ota_settings()
+
+    async def push_ota_progress(self, phase: Any, progress: Any = None, **extra: Any) -> None:
+        """Broadcast an evt:ota-progress frame (values are sent as given, so tests can send junk)."""
+        frame: dict[str, Any] = {"tp": "evt:ota-progress", "phase": phase, **extra}
+        if progress is not None:
+            frame["progress"] = progress
+        await self.push(frame)
 
     async def drop_connections(self) -> None:
         """Close every client connection from the server side."""

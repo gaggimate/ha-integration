@@ -27,6 +27,8 @@ HISTORY_INDEX_PATH = "/api/history/index.bin"
 HISTORY_INDEX_MAX_BYTES = 2 * 1024 * 1024  # size cap for the shot index download
 WS_UNAVAILABLE_TIMEOUT = 15  # seconds - mark unavailable if no status for 15 seconds
 OTA_REFRESH_DELAY = 2  # seconds - debounce for re-reading OTA settings after `up` changes
+OTA_WATCHDOG_GRACE = 180  # seconds - longest silence tolerated during an update (each progress event extends it)
+OTA_START_PENDING = 5  # seconds - an install request counts as running until the firmware reports progress
 
 # Message types
 MSG_TYPE_STATUS = "evt:status"
@@ -54,6 +56,8 @@ MSG_TYPE_PROFILES_LIST = "req:profiles:list"
 MSG_TYPE_PROFILES_SELECT = "req:profiles:select"
 MSG_TYPE_OTA_SETTINGS = "req:ota-settings"
 MSG_TYPE_OTA_SETTINGS_RESPONSE = "res:ota-settings"
+MSG_TYPE_OTA_START = "req:ota-start"
+MSG_TYPE_EVENT_OTA_PROGRESS = "evt:ota-progress"
 MSG_TYPE_PROFILES_LIST_RESPONSE = "res:profiles:list"
 MSG_TYPE_HISTORY_LIST = "req:history:list"
 MSG_TYPE_HISTORY_DELETE = "req:history:delete"
@@ -98,6 +102,18 @@ MODE_ICONS = {
     MachineMode.GRIND: "mdi:grain",
 }
 
+# Firmware update: channels the firmware knows (key as sent on the wire -> label) and install targets
+OTA_CHANNELS = {"latest": "Stable", "nightly": "Nightly"}
+OTA_COMPONENTS = ("display", "controller", "both")
+
+# evt:ota-progress phases
+OTA_PHASE_IDLE = 0
+OTA_PHASE_DISPLAY = 1
+OTA_PHASE_DISPLAY_FS = 2
+OTA_PHASE_CONTROLLER = 3
+OTA_PHASE_FINISHED = 4
+OTA_PHASE_FAILED = 5
+
 # Entity unique ID suffixes
 UNIQUE_ID_CURRENT_TEMP = "current_temperature"
 UNIQUE_ID_TARGET_TEMP = "target_temperature"
@@ -115,6 +131,11 @@ UNIQUE_ID_SW_DISPLAY = "software_display_version"
 UNIQUE_ID_SW_CONTROLLER = "software_controller_version"
 UNIQUE_ID_UPDATE_DISPLAY = "display_software_update"
 UNIQUE_ID_UPDATE_CONTROLLER = "controller_software_update"
+UNIQUE_ID_FIRMWARE_UPDATE_DISPLAY = "display_firmware_update"
+UNIQUE_ID_FIRMWARE_UPDATE_CONTROLLER = "controller_firmware_update"
+UNIQUE_ID_FIRMWARE_UPDATE_BOTH = "firmware_update"
+UNIQUE_ID_CHECK_UPDATES = "check_for_updates"
+UNIQUE_ID_UPDATE_CHANNEL = "update_channel"
 UNIQUE_ID_LATEST_VERSION = "latest_software_version"
 UNIQUE_ID_SCALE_CONNECTED = "scale_connection_status"
 UNIQUE_ID_CURRENT_WEIGHT = "current_weight"
