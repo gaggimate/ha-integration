@@ -1,0 +1,44 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "GaggiMate einrichten",
+        "description": "Gib die Verbindungsdaten für dein GaggiMate-Gerät ein.",
+        "data": {
+          "host": "Host (IP oder Hostname)",
+          "port": "Port"
+        }
+      },
+      "discovery_confirm": {
+        "title": "GaggiMate gefunden",
+        "description": "Ein GaggiMate-Gerät wurde unter {name} gefunden. Möchtest du es hinzufügen?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Gerät fehlgeschlagen. Bitte Host und Port prüfen.",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
+    },
+    "abort": {
+      "already_configured": "Dieses Gerät ist bereits konfiguriert.",
+      "cannot_connect": "Verbindung zum gefundenen Gerät nicht möglich."
+    }
+  },
+  "services": {
+    "trim_shot_history": {
+      "name": "Shot-Historie kürzen",
+      "description": "Löscht die ältesten Shots, sodass nur die angegebene Anzahl der neuesten Shots auf dem Gerät verbleibt.",
+      "fields": {
+        "max_shots": {
+          "name": "Maximale Anzahl zu behaltender Shots",
+          "description": "Behält so viele der neuesten Shots; ältere Shots werden entfernt.",
+          "example": "50"
+        },
+        "keep_annotated": {
+          "name": "Annotierte Shots behalten",
+          "description": "Annotierte Shots von der Kürzung ausschließen; max_shots gilt nur für nicht annotierte Shots.",
+          "example": "false"
+        }
+      }
+    }
+  }
+}
