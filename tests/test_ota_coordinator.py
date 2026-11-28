@@ -523,11 +523,20 @@ async def test_start_without_connection_fails_cleanly(quiet: Any) -> None:
 
 
 @pytest.mark.frames("dual_boiler_brewing")
-async def test_start_works_during_brew(quiet: Any, hang: FakeGaggiMate) -> None:
+async def test_start_refused_during_brew(quiet: Any, hang: FakeGaggiMate) -> None:
     c = quiet
-    await c.start_ota("both")
-    await hang.wait_for_request(START)
-    assert hang.requests_of(START) == [{"tp": START, "cp": "both"}]
+    with pytest.raises(UpdateFailed, match="busy"):
+        await c.start_ota("both")
+    assert hang.requests_of(START) == []
+
+
+async def test_start_refused_while_grinding(quiet: Any, hang: FakeGaggiMate) -> None:
+    c = quiet
+    await hang.push_state(gact=1)
+    await settle()
+    with pytest.raises(UpdateFailed, match="busy"):
+        await c.start_ota("display")
+    assert hang.requests_of(START) == []
 
 
 async def test_start_works_in_standby(quiet: Any, hang: FakeGaggiMate) -> None:

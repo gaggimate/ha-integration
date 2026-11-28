@@ -240,7 +240,7 @@ The Display Firmware Update and Controller Firmware Update entities show the ins
 Before you press install:
 
 - There is no way to cancel an update once it has started.
-- Installing is not blocked while the machine is brewing. Do not install during a shot: the firmware puts the machine in standby when the update starts.
+- Install is refused while the machine is brewing, steaming, pouring water or grinding, because the firmware puts the machine in standby when the update starts.
 - Any install that flashes firmware reboots the display. The display reboots, so the integration's connection to the machine drops and the entities become unavailable. This is expected, and the integration reconnects by itself. During the update the other entities keep their last values.
 - All three update entities show as in progress while an update runs, whichever entity or client started it, because the integration does not track that. Each entity shows a percentage only while its own part is being flashed (the Display and Controller Firmware Update entity shows whichever part is running); the controller is flashed first, then the display, and the percentage restarts when the second part starts.
 - If nothing needs updating, the install does nothing.
