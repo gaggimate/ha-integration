@@ -307,11 +307,11 @@ async def test_install_while_updating_raises_and_sends_nothing(
 
 
 @pytest.mark.frames("dual_boiler_brewing")
-async def test_install_works_during_brew(hass: HomeAssistant, quiet: Any, fake_gaggimate: FakeGaggiMate) -> None:
+async def test_install_refused_during_brew(hass: HomeAssistant, quiet: Any, fake_gaggimate: FakeGaggiMate) -> None:
     feed_settings(quiet, **VARIATIONS["both_update_available"])
-    await install(hass, BOTH)
-    await fake_gaggimate.wait_for_request(START)
-    assert fake_gaggimate.requests_of(START) == [{"tp": START, "cp": "both"}]
+    with pytest.raises(HomeAssistantError, match="busy"):
+        await install(hass, BOTH)
+    assert fake_gaggimate.requests_of(START) == []
 
 
 async def test_install_failure_surfaces_as_ha_error(hass: HomeAssistant, quiet: Any) -> None:

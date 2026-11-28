@@ -1079,12 +1079,15 @@ class GaggiMateCoordinator(DataUpdateCoordinator):
         """Ask the firmware to install the display, the controller or both.
 
         The firmware sends no response: progress arrives as evt:ota-progress and the
-        display always reboots after flashing. Nothing is checked about the machine state.
+        display always reboots after flashing. Install is refused while a process or grind is active.
         """
         if component not in OTA_COMPONENTS:
             raise ValueError(f"Unknown update component: {component}")
         if self.ota_updating:
             raise UpdateFailed("A firmware update is already running")
+        data = self.data or {}
+        if (data.get("process") or {}).get("a") == 1 or data.get("gact") == 1:
+            raise UpdateFailed("GaggiMate is busy (brewing, steaming, pouring water or grinding)")
 
         # Record before the await so a concurrent call and the watchdog see it
         previous = (self._ota_start_sent_at, self._ota_grace_until)
